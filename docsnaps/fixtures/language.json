@@ -1,0 +1,30 @@
+[
+  {
+    "model": "docsnaps.language",
+    "fields": {
+      "name": "English",
+      "code_iso_639_1": "en"
+    }
+  },
+  {
+    "model": "docsnaps.language",
+    "fields": {
+      "name": "Spanish",
+      "code_iso_639_1": "es"
+    }
+  },
+  {
+    "model": "docsnaps.language",
+    "fields": {
+      "name": "French",
+      "code_iso_639_1": "fr"
+    }
+  },
+  {
+    "model": "docsnaps.language",
+    "fields": {
+      "name": "German",
+      "code_iso_639_1": "de"
+    }
+  }
+]
