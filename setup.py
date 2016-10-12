@@ -16,7 +16,7 @@ setup(
     ],
     license='MIT',
     packages=find_packages(),
-    # url='https://github.com/monotonee/soundcurses',
+    # url='<url here>',
 
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
