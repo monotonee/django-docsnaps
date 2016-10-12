@@ -35,16 +35,13 @@ def handle(*args, **options):
         https://docs.python.org/3/library/pdb.html#pdbcommand-args
 
     """
-    app_name = __name__.split('.')[0]
-    import pdb
-    pdb.set_trace()
     # Attempt to find and load module.
     # If not found or loading error, raise exception.
     # Conscious choice to omit exeption handling for now. The resulting
     # ImportError fits exceptional condition and is suitably descriptive.
-    module = import_module('django-docsnaps-' + options['module'])
-
-
+    module = import_module(options['module'])
+    import pdb
+    pdb.set_trace()
 
     # Attempt to request all necessary models/data from the module.
     # If not complete data set, raise exception.
