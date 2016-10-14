@@ -123,11 +123,30 @@ class Company(models.Model):
     """
     A company or corporation.
 
+    Unique natural key:
+
+    Business or company names are registered by state in the U.S. Therefore, it
+    is theoretically possible that two companies could have the same name. In
+    addition, I am unfamiliar with global regulations, if any, so names may be
+    duplicated within another country.
+
+    Host names, however, must be unique within a TLD by technical necessity,
+    although it is completely possible that a company may not have a web site.
+    Another problem is that the same host name is used but the full URL is in a
+    different format. For example, one host may use TLS while the other may not,
+    even though both point to the same domain. I suspect this can be solved by
+    field validators enforcing the omission of protocol and trailing slash. If
+    this field is used as any type of natural key in the future, it should be
+    renamed to "urn" as protocol and trailing slashes will have to be omitted.
+
+    Therefore, the Company name is the natural key. The cleanliness of the data
+    will have to depend upon the user.
+
     """
 
     company_id = models.AutoField(primary_key=True)
     name = models.CharField(
-        blank=False, default=None, max_length=128, null=False)
+        blank=False, default=None, max_length=128, null=False, unique=True)
     website = models.URLField(
         blank=True, default=None, max_length=255, null=True)
     updated_timestamp = MariadbTimestampField(auto_now=True)
@@ -143,7 +162,11 @@ class Service(models.Model):
     """
     A service offered by a company.
 
-    Address can be an IP address or an URL.
+    Natural key: a service in this app hinges upon some network resource. The
+    Service, however, does not define the resource endpoint URI as that is
+    described by the DocumentsLanguages model. Therefore, the website field is
+    simply auxiliary metadata and the Service name combined with the Company is
+    the natural key.
 
     """
 
@@ -153,8 +176,8 @@ class Service(models.Model):
         verbose_name='company')
     name = models.CharField(
         blank=False, default=None, max_length=255, null=False)
-    url = models.CharField(
-        blank=False, default=None, max_length=255, null=False)
+    website = models.URLField(
+        blank=True, default=None, max_length=255, null=True)
     updated_timestamp = MariadbTimestampField(auto_now=True)
 
     def __str__(self):
@@ -162,11 +185,14 @@ class Service(models.Model):
 
     class Meta:
         db_table = 'service'
+        unique_together = ('company_id', 'name')
 
 
 class Language(models.Model):
     """
     A language in which a document may be written.
+
+    Natural key is the ISO code.
 
     May be redundant in light of Django's built-in support for language codes.
     However, it may be worth it to provide referential integrity in database.
@@ -193,7 +219,9 @@ class Language(models.Model):
 
 class Document(models.Model):
     """
-    A document served by a service.
+    A document provided by a service.
+
+    Natural key is the Service and the Document name.
 
     """
 
@@ -208,15 +236,20 @@ class Document(models.Model):
 
     class Meta:
         db_table = 'document'
+        unique_together = ('service_id', 'name')
 
 
 class DocumentsLanguages(models.Model):
     """
     A many-to-many relationship between a document and a language.
 
-    Experience has taught me the value of using a primary key on relationships.
+    Represents a "document instance." This is the core of this app. The app
+    will use this model to get a snapshot job's URI
 
-    url_path is concatenated to the document's service address.
+    Experience has taught me the value of using a primary key on relationship
+    records. In fact, look no further than the Snapshot model. Don't even bother
+    asking me to remove the AutoField.
+
     is_enabled is a boolean value. When true, it indicates that the document, in
     the given language, is being polled with each poll cycle. This field is
     stored in the DB as a tinyint using eight bytes since MariaDB/MySQL stores
@@ -231,7 +264,7 @@ class DocumentsLanguages(models.Model):
     language_id = models.ForeignKey(
         Language, db_column='language_id', on_delete=models.PROTECT,
         verbose_name='language')
-    url = models.CharField(
+    url = models.URLField(
         blank=False, default=None, max_length=255, null=False)
     is_enabled = models.BooleanField(default=False)
     updated_timestamp = MariadbTimestampField(auto_now=True)
@@ -248,6 +281,9 @@ class Snapshot(models.Model):
 
     Date and time fields are separated for index and query optimization,
     datetime field used for ranges and range comparison.
+
+    Note that there is no unique natural key, composite or otherwise. This
+    leaves it completely to the users' discretion to decide snapshot intervals.
 
     """
 
@@ -268,13 +304,17 @@ class Snapshot(models.Model):
 
 class Transform(models.Model):
     """
-    A transform class to which to pass a newly-fetched doc snapshot.
+    A transform class to which to pass a newly-fetched document snapshot.
 
     This table is designed to relate plugin modules and their supplied
     transforms to the documents they registered when installed.
 
     Using a separate table rather than adding "module" to DocumentsLanguages
     allows for more flexible relationships and for chained transforms.
+
+    Natural key: the unique combination of documents_languages_id and module.
+    There is currently no correct reason to double-register a module for the
+    same snapshot job.
 
     """
 
@@ -288,5 +328,5 @@ class Transform(models.Model):
 
     class Meta:
         db_table = 'transform'
-        unique_together = ['documents_languages_id', 'module']
+        unique_together = ('documents_languages_id', 'module')
 
