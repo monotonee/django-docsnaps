@@ -12,14 +12,28 @@ run
 """
 
 import argparse
-from django.core.management.base import BaseCommand, CommandError
 from importlib import import_module
 
-from . import _install as subcommand_install
-from . import _run as subcommand_run
+from django.core.management.base import BaseCommand, CommandError
+
+from . import _install
+# from . import _run as run_parser
 
 
 class Command(BaseCommand):
+
+    def __init__(self, stdout=None, stderr=None, no_color=False):
+        """
+        Override parent init method to create subcommand instances.
+
+        I'm not sure about using **kwargs here. It seems like it might have
+        hidden pitfalls so I'm going with a direct method signature copy for
+        now.
+
+        """
+        super().__init__(stdout=stdout, stderr=stderr, no_color=no_color)
+        self._install = _install.Command(
+            stdout=stdout, stderr=stderr, no_color=no_color)
 
     def add_arguments(self, parser):
         """
@@ -44,15 +58,15 @@ class Command(BaseCommand):
         # "install" subcommand.
         install_parser = subparsers.add_parser(
             'install',
-            help=subcommand_install.HELP)
-        subcommand_install.add_arguments(install_parser)
-        install_parser.set_defaults(handler=subcommand_install.handle)
+            help=self._install.help)
+        self._install.add_arguments(install_parser)
+        install_parser.set_defaults(handler=self._install.handle)
 
         # "run" subcommand.
-        run_parser = subparsers.add_parser(
-            'run',
-            help=subcommand_run.HELP)
-        run_parser.set_defaults(handler=subcommand_run.handle)
+        # run_parser = subparsers.add_parser(
+            # 'run',
+            # help=subcommand_run.HELP)
+        # run_parser.set_defaults(handler=subcommand_run.handle)
 
     def handle(self, *args, **options):
         options['handler'](*args, **options)
