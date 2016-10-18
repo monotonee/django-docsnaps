@@ -123,6 +123,10 @@ class Company(models.Model):
     """
     A company or corporation.
 
+    Although not necessary for snapshot job definitions, this extra model layer
+    provides a logical way to organize snpashot jobs, especially for instances
+    in which the resulting snapshot data is displayed in a UI.
+
     Unique natural key:
 
     Business or company names are registered by state in the U.S. Therefore, it
@@ -135,12 +139,13 @@ class Company(models.Model):
     Another problem is that the same host name is used but the full URL is in a
     different format. For example, one host may use TLS while the other may not,
     even though both point to the same domain. I suspect this can be solved by
-    field validators enforcing the omission of protocol and trailing slash. If
+    field validators enforcing the omission of scheme and trailing slashes. If
     this field is used as any type of natural key in the future, it should be
-    renamed to "urn" as protocol and trailing slashes will have to be omitted.
+    renamed to "url" or perhaps "hostname".
 
     Therefore, the Company name is the natural key. The cleanliness of the data
-    will have to depend upon the user.
+    (name duplication, spelling, etc.) will have to depend upon the user. We'l
+    see how often names are duplicated.
 
     """
 
