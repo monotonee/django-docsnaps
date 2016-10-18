@@ -8,39 +8,25 @@ All necessary data for the new job is loaded into the database.
 from importlib import import_module
 
 from django.core.management.base import BaseCommand, CommandError
-# , OutputWrapper
-
-
-
-# Might not be needed if use CommandError instead.
-# class InstallError(Exception):
-    # """
-    # An exception raised when something goes wrong during plugin install.
-
-    # During the install process, many libraries' exceptions are caught and
-    # messages output to stdout. I could re-raise the exceptions and be forced
-    # to deal with myriad varieties of exception further down the stack or I could
-    # raise a RuntimeError. However, I don't trust that I won't accidentally catch
-    # a legitimate RuntimeError raised by an underlying library. Therefore, for
-    # increased error handling granularity of only certain exceptional conditions,
-    # I will use this custom exception for isolated internal error handling.
-
-    # When a step in the install process raises this exception, it indicates that
-    # the entire install procedure will end.
-
-    # """
 
 
 class Command(BaseCommand):
 
     help = 'Installs a new snapshot job and registers its transforms.'
 
-    def _load_module(self, module_name):
+    def _import_module(self, module_name):
         """
         Attempts to load the module passed as an argument to the subcommand.
 
+        Args:
+            module_name (string): The fully-qualified, absolute name of the
+                plugin module.
+
         Returns:
             module: The module returned by importlib.import_module if successful.
+
+        Raises:
+            django.core.management.base.CommandError: If import fails
 
         """
         self.stdout.write('Attempting to load module: ', ending='')
@@ -52,6 +38,51 @@ class Command(BaseCommand):
         else:
             self.stdout.write(self.style.SUCCESS('done'))
             return module
+
+    def _validate_module(self, module):
+        """
+        Check module interface and validate models provided by imported module.
+
+        Checks for the full model hierarchy, from Company to DocumentsLanguages.
+        The plugin module must provide an iterable of DocumentsLanguages
+        instances the foreign key and many-to-many attributes of which will be
+        traversed.
+
+        Args:
+            module: The imported plugin module as returned by importlib.
+
+        Returns:
+            boolean: True if valid
+
+        Raises:
+            django.core.management.base.CommandError: If modules are invalid.
+
+        """
+        self.stdout.write('Validating module: ', ending='')
+
+        # Check module interface.
+        necessary_callables = ['get_models', 'transform']
+        error_message = None
+        for callable_name in necessary_callables:
+            if not hasattr(module, callable_name):
+                error_message = (
+                    'No attribute ' + callable_name +
+                    ' in ' + module.__name__ + '.')
+            elif not callable(getattr(module, callable_name)):
+                error_message = (
+                    callable_name + ' is not callable in ' +
+                    module.__name__ + '.')
+        import pdb
+        pdb.set_trace()
+
+            # get models
+            # transform
+        # Get models and check for iterable of DocumentsLanguages.
+            # is iterable
+            # elements are correct model type
+        # Traverse tree, checking each instance for insert-readiness.
+
+
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -77,7 +108,8 @@ class Command(BaseCommand):
             https://docs.python.org/3/library/pdb.html#pdbcommand-args
 
         """
-        module = self._load_module(options['module'])
+        module = self._import_module(options['module'])
+        is_valid = self._validate_module(module)
 
         # import pdb
         # pdb.set_trace()
@@ -89,6 +121,8 @@ class Command(BaseCommand):
         # language check, company, service, document, documentslanguages
 
         # Attempt to load al data within a single transaction.
+            # Remember that the get_or_create() method returns tuples.
+            # https://docs.djangoproject.com/en/dev/ref/models/querysets/#get-or-create
             # Register module and its transformer.
             # Make sure to respect --disabled choice.
             # If storage error, roll back transaction and raise exception.
