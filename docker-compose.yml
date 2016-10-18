@@ -1,0 +1,18 @@
+---
+# Docker Compose file to create a MariaDB database instance FOR TESTING ONLY.
+# Sensitive settings are saved in plain text here. Do not use in production.
+# If one doesn't want SQLite for testing, this provides an easy alternative.
+version: '2'
+services:
+  mariadb:
+    image: mariadb:latest
+    ports:
+      - '127.0.0.1:49152:3306'
+    volumes:
+      - ./docker_compose/mariadb/conf.d:/etc/mysql/conf.d:ro
+      - ./docker_compose/mariadb/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+    environment:
+      - MYSQL_ALLOW_EMPTY_PASSWORD=yes
+      - MYSQL_PASSWORD=tester
+      - MYSQL_USER=tester
+...
