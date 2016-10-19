@@ -5,6 +5,7 @@ This module defines tests for the "install" subcommand's _import_module method.
 
 import io
 import types
+import unittest
 
 from django.core.management.base import CommandError
 from django.test import SimpleTestCase
@@ -22,7 +23,12 @@ class TestImportModule(SimpleTestCase):
         Module fails to be imported.
 
         """
-        self.assertRaises(CommandError, self._command._import_module, 'dodge.this')
+        self.assertRaisesRegex(
+            CommandError,
+            r'^No module .*$',
+            self._command._import_module,
+            'dodge.this')
+        self.assertIn('failed', self._command.stdout.getvalue())
 
     def test_module_load_successful2(self):
         """
@@ -32,4 +38,6 @@ class TestImportModule(SimpleTestCase):
         module = self._command._import_module('bisect')
 
         self.assertIsInstance(module, types.ModuleType)
+        self.assertIn('success', self._command.stdout.getvalue())
+
 
