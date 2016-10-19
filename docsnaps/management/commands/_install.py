@@ -39,18 +39,13 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS('success'))
             return module
 
-    def _validate_module(self, module):
+    def _validate_module_interface(self, module):
         """
         Check module interface and validate models provided by imported module.
 
         The goal in validating the module is not to attempt to circumvent
         Pythonic duck typing, but to generate helpful error messages for plugin
-        developer.
-
-        Checks for the full model hierarchy, from Company to DocumentsLanguages.
-        The plugin module must provide an iterable of DocumentsLanguages
-        instances the foreign key and many-to-many attributes of which will be
-        traversed.
+        developers.
 
         Args:
             module: The imported plugin module as returned by importlib.
@@ -59,10 +54,10 @@ class Command(BaseCommand):
             boolean: True if valid
 
         Raises:
-            django.core.management.base.CommandError: If modules are invalid.
+            django.core.management.base.CommandError: If module is invalid.
 
         """
-        self.stdout.write('Validating module: ', ending='')
+        self.stdout.write('Validating module interface: ', ending='')
 
         # Check module interface.
         necessary_callables = ['get_models', 'transform']
@@ -80,14 +75,37 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.ERROR('failed'))
                 raise CommandError(error_message)
 
-            # get models
-            # transform
+        self.stdout.write(self.style.SUCCESS('success'))
+
+    def _validate_module_models(self, module):
+        """
+        Validate that the module returns complete model hierarchy.
+
+        Checks for the full model hierarchy, from Company to DocumentsLanguages.
+        The plugin module must provide an iterable of DocumentsLanguages
+        instances the foreign key and many-to-many attributes of which will be
+        traversed.
+
+        The goal in validating the module is not to attempt to circumvent
+        Pythonic duck typing, but to generate helpful error messages for plugin
+        developers.
+
+        Args:
+            module: The imported plugin module as returned by importlib.
+
+        Returns:
+            boolean: True if valid
+
+        Raises:
+            django.core.management.base.CommandError: If module is invalid.
+
+        """
+        self.stdout.write('Validating module models: ', ending='')
         # Get models and check for iterable of DocumentsLanguages.
             # is iterable
             # elements are correct model type
         # Traverse tree, checking each instance for insert-readiness.
             # Check that at least one instance of each model is provided.
-
         self.stdout.write(self.style.SUCCESS('success'))
 
     def add_arguments(self, parser):
@@ -115,7 +133,9 @@ class Command(BaseCommand):
 
         """
         module = self._import_module(options['module'])
-        is_valid = self._validate_module(module)
+        self._validate_module_interface(module)
+        self._validate_module_models(module)
+
 
         # import pdb
         # pdb.set_trace()
