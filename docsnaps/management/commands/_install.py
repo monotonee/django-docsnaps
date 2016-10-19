@@ -36,12 +36,16 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR('failed'))
             raise CommandError(import_error)
         else:
-            self.stdout.write(self.style.SUCCESS('done'))
+            self.stdout.write(self.style.SUCCESS('success'))
             return module
 
     def _validate_module(self, module):
         """
         Check module interface and validate models provided by imported module.
+
+        The goal in validating the module is not to attempt to circumvent
+        Pythonic duck typing, but to generate helpful error messages for plugin
+        developer.
 
         Checks for the full model hierarchy, from Company to DocumentsLanguages.
         The plugin module must provide an iterable of DocumentsLanguages
@@ -66,14 +70,15 @@ class Command(BaseCommand):
         for callable_name in necessary_callables:
             if not hasattr(module, callable_name):
                 error_message = (
-                    'No attribute ' + callable_name +
-                    ' in ' + module.__name__ + '.')
+                    'No attribute "' + callable_name +
+                    '" in ' + module.__name__ + '.')
             elif not callable(getattr(module, callable_name)):
                 error_message = (
                     callable_name + ' is not callable in ' +
                     module.__name__ + '.')
-        import pdb
-        pdb.set_trace()
+            if error_message:
+                self.stdout.write(self.style.ERROR('failed'))
+                raise CommandError(error_message)
 
             # get models
             # transform
@@ -81,8 +86,9 @@ class Command(BaseCommand):
             # is iterable
             # elements are correct model type
         # Traverse tree, checking each instance for insert-readiness.
+            # Check that at least one instance of each model is provided.
 
-
+        self.stdout.write(self.style.SUCCESS('success'))
 
     def add_arguments(self, parser):
         parser.add_argument(

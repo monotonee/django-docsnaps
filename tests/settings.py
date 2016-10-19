@@ -15,5 +15,6 @@ DATABASES = {
 # ]
 
 INSTALLED_APPS = [
-    'tests',
+    'docsnaps.apps.DocsnapsConfig',
+    'tests'
 ]

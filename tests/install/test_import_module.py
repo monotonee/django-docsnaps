@@ -5,7 +5,6 @@ This module defines tests for the "install" subcommand's _import_module method.
 
 import io
 import types
-import unittest
 
 from django.core.management.base import CommandError
 from django.test import SimpleTestCase
@@ -30,7 +29,7 @@ class TestImportModule(SimpleTestCase):
             'dodge.this')
         self.assertIn('failed', self._command.stdout.getvalue())
 
-    def test_module_load_successful2(self):
+    def test_module_load_success(self):
         """
         Module is imported successfully.
 
