@@ -117,11 +117,25 @@ class TestValidateModuleModels(SimpleTestCase):
             self._module)
         self.assertIn('failed', self._command.stdout.getvalue())
 
+    def test_return_value_wrong_type(self):
+        """
+        Test the module's get_models return value as incorrect value.
+
+        """
+        self._module.get_models.return_value = (42,)
+
+        self.assertRaisesRegex(
+            CommandError,
+            re.compile('.*type.*', flags=re.IGNORECASE),
+            self._command._validate_module_models,
+            self._module)
+        self.assertIn('failed', self._command.stdout.getvalue())
+
     def test_missing_models(self):
         """
         Test missing models from the hierarchy.
 
-        Tests the absence of each model, one at a time.
+        Tests the absence of each model one at a time in sub-tests.
 
         """
         model_names = [
