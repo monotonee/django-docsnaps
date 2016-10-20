@@ -50,9 +50,6 @@ class Command(BaseCommand):
         Args:
             module: The imported plugin module as returned by importlib.
 
-        Returns:
-            boolean: True if valid
-
         Raises:
             django.core.management.base.CommandError: If module is invalid.
 
@@ -92,9 +89,6 @@ class Command(BaseCommand):
 
         Args:
             module: The imported plugin module as returned by importlib.
-
-        Returns:
-            boolean: True if valid
 
         Raises:
             django.core.management.base.CommandError: If module is invalid.
