@@ -103,20 +103,6 @@ class TestValidateModuleModels(SimpleTestCase):
 
         self.assertIn('success', self._command.stdout.getvalue())
 
-    def test_return_value_empty(self):
-        """
-        Test the module's get_models return value as empty iterable.
-
-        """
-        self._module.get_models.return_value = ()
-
-        self.assertRaisesRegex(
-            CommandError,
-            re.compile(r'.*empty.*', flags=re.IGNORECASE),
-            self._command._validate_module_models,
-            self._module)
-        self.assertIn('failed', self._command.stdout.getvalue())
-
     def test_return_value_not_iterable(self):
         """
         Test the module's get_models return value as a non-iterable.
