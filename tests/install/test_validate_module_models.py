@@ -89,9 +89,10 @@ class TestValidateModuleModels(SimpleTestCase):
 
     def setUp(self):
         self._command = Command(stdout=io.StringIO(), stderr=io.StringIO())
-        attributes = {'__name__': 'mock.module'}
         self._module = mock.NonCallableMock(
             spec=['__name__', 'get_models', 'transform'])
+        attributes = {'__name__': 'mock.module'}
+        self._module.configure_mock(**attributes)
 
     def test_valid_module(self):
         """
@@ -119,14 +120,14 @@ class TestValidateModuleModels(SimpleTestCase):
 
     def test_return_value_wrong_type(self):
         """
-        Test the module's get_models return value as incorrect value.
+        Test get_models return value as iterable of incorrect types.
 
         """
         self._module.get_models.return_value = (42,)
 
         self.assertRaisesRegex(
             CommandError,
-            re.compile('.*type.*', flags=re.IGNORECASE),
+            re.compile(r'.*DocumentsLanguages.*', flags=re.IGNORECASE),
             self._command._validate_module_models,
             self._module)
         self.assertIn('failed', self._command.stdout.getvalue())
@@ -150,7 +151,7 @@ class TestValidateModuleModels(SimpleTestCase):
                     omit=model_name)
                 self.assertRaisesRegex(
                     CommandError,
-                    re.compile('.*"' + model_name + '".*', flags=re.IGNORECASE),
+                    re.compile('.*' + model_name + '.*', flags=re.IGNORECASE),
                     self._command._validate_module_models,
                     self._module)
                 self.assertIn('failed', self._command.stdout.getvalue())

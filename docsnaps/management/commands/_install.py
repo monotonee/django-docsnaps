@@ -1,13 +1,22 @@
 """
 A Django admin command that will install a new snapshot job.
 
+Before attempting to load the plugin module's data into the database, validation
+is performed on the module. This is done to ease plugin module development by
+providing helpful and explicit error messages. However, I'm not sure the benefit
+is worth the cost in maintenance. If these validation methods prove to inhibit
+module API changes or prove to be too brittle, then they will be removed.
+
 All necessary data for the new job is loaded into the database.
 
 """
 
+from collections import OrderedDict
 from importlib import import_module
 
 from django.core.management.base import BaseCommand, CommandError
+
+import docsnaps.models
 
 
 class Command(BaseCommand):
@@ -33,11 +42,31 @@ class Command(BaseCommand):
         try:
             module = import_module(module_name)
         except ImportError as import_error:
-            self.stdout.write(self.style.ERROR('failed'))
-            raise CommandError(import_error)
+            self._raise_command_error(import_error)
         else:
             self.stdout.write(self.style.SUCCESS('success'))
             return module
+
+    def _raise_command_error(self, message):
+        """
+        Raises a CommandError and writes a failure string to stdout.
+
+        Within this command class, the pattern of raising the CommandError and
+        finishing a stdout string with a failure message is repeated
+        consistently.
+
+        Args:
+            message (string or Exception): The message to pass to the exception
+                constructor. Whatever is passed to an Exception constructor
+                seems to be implicitly converted to a string. All Exception
+                subclasses appear to output their message when converted.
+
+        Raises:
+            django.core.management.base.CommandError
+
+        """
+        self.stdout.write(self.style.ERROR('failed'))
+        raise CommandError(message)
 
     def _validate_module_interface(self, module):
         """
@@ -69,8 +98,7 @@ class Command(BaseCommand):
                     callable_name + ' is not callable in ' +
                     module.__name__ + '.')
             if error_message:
-                self.stdout.write(self.style.ERROR('failed'))
-                raise CommandError(error_message)
+                self._raise_command_error(error_message)
 
         self.stdout.write(self.style.SUCCESS('success'))
 
@@ -87,6 +115,9 @@ class Command(BaseCommand):
         Pythonic duck typing, but to generate helpful error messages for plugin
         developers.
 
+        It is best to call this after validating module interface in order to
+        avoid AttributeErrors.
+
         Args:
             module: The imported plugin module as returned by importlib.
 
@@ -95,11 +126,54 @@ class Command(BaseCommand):
 
         """
         self.stdout.write('Validating module models: ', ending='')
-        # Get models and check for iterable of DocumentsLanguages.
-            # is iterable
-            # elements are correct model type
-        # Traverse tree, checking each instance for insert-readiness.
-            # Check that at least one instance of each model is provided.
+
+        module_models = module.get_models()
+
+        # Return value is an iterable.
+        try:
+            iter(module_models)
+        except TypeError as type_error:
+            self._raise_command_error(type_error)
+
+        # Elements of iterable are present and of correct type. This smells.
+        error_format_string = (
+            'No {model} instances returned by ' +
+            module.__name__ + '.get_models().')
+        error_message = error_format_string.format(model='DocumentsLanguages')
+        for model in module_models:
+            if not isinstance(model, docsnaps.models.DocumentsLanguages):
+                error_message = error_format_string.format(
+                    model='DocumentsLanguages')
+                break
+            elif (not hasattr(model, 'language_id') or
+                not isinstance(model.language_id, docsnaps.models.Language)):
+                error_message = error_format_string.format(model='Language')
+                break
+            elif (not hasattr(model, 'document_id') or
+                not isinstance(model.document_id, docsnaps.models.Document)):
+                error_message = error_format_string.format(model='Document')
+                break
+            elif (not hasattr(model.document_id, 'service_id') or
+                not isinstance(
+                    model.document_id.service_id,
+                    docsnaps.models.Service)):
+                error_message = error_format_string.format(model='Service')
+                break
+            elif (not hasattr(model.document_id.service_id, 'company_id') or
+                not isinstance(
+                    model.document_id.service_id.company_id,
+                    docsnaps.models.Company)):
+                error_message = error_format_string.format(model='Company')
+                break
+            else:
+                error_message = None
+
+        # Note: if the iterable returned by the module was empty, then the loop
+        # above will not have made an iteration. This raises an exception with
+        # the default value of the error message above.
+        if error_message:
+            self._raise_command_error(error_message)
+
         self.stdout.write(self.style.SUCCESS('success'))
 
     def add_arguments(self, parser):
