@@ -10,11 +10,12 @@ module API changes or prove to be too brittle, then they will be removed.
 All necessary data for the new job is loaded into the database.
 
 """
-
-from collections import OrderedDict
+from collections import deque
 from importlib import import_module
 
+from django.apps import apps
 from django.core.management.base import BaseCommand, CommandError
+from django.db.models.fields.related import ForeignKey
 
 import docsnaps.models
 
@@ -22,6 +23,46 @@ import docsnaps.models
 class Command(BaseCommand):
 
     help = 'Installs a new snapshot job and registers its transforms.'
+
+    def _get_relation_tree(self, model):
+        """
+        A generator method that recursively yields model instances.
+
+        The chain of relationship fields in a model form a tree structure.
+        The plugin modules' get_models() function returns an iterable of what
+        equates to the deepest nodes in their respective "trees." This method
+        yields each model in the relationship trees in a depth-first manner.
+
+        For instance, the DocumentsLanguages models have two relationship
+        (ForeignKey) fields: a Document and a Language. This generator will
+        first yield the DocumentsLanguages instance before yielding the "child"
+        Document and Language instances.
+
+        Since this method yields depth first, it tests for instances of
+        relationship fields, not reverse relationship fields.
+
+        Args:
+            model (docsnaps.models.DocumentsLanguages): A "child"
+                model instance, the relationship fields of which will be
+                traversed up the tree.
+
+        Yields:
+            docsnaps.models.*: Each model instance of each relationship field
+                in the model tree, depth-first.
+
+        See:
+            https://github.com/django/django/blob/master/django/db/models/fields/related.py
+            https://github.com/django/django/blob/master/django/db/models/fields/reverse_related.py
+
+        """
+        model_queue = deque([model])
+        while model_queue:
+            current_model = model_queue.popleft()
+            for field in current_model._meta.get_fields():
+                if (isinstance(field, ForeignKey)
+                    and hasattr(current_model, field.name)):
+                    model_queue.append(getattr(current_model, field.name))
+            yield current_model
 
     def _import_module(self, module_name):
         """
@@ -106,9 +147,9 @@ class Command(BaseCommand):
         """
         Validate that the module returns complete model hierarchy.
 
-        Checks for the full model hierarchy, from Company to DocumentsLanguages.
-        The plugin module must provide an iterable of DocumentsLanguages
-        instances the foreign key and many-to-many attributes of which will be
+        Checks for the full model relationship tree, from Company to
+        DocumentsLanguages. The plugin module must provide an iterable of
+        DocumentsLanguages instances the relationship fields of which will be
         traversed.
 
         The goal in validating the module is not to attempt to circumvent
@@ -122,7 +163,8 @@ class Command(BaseCommand):
             module: The imported plugin module as returned by importlib.
 
         Raises:
-            django.core.management.base.CommandError: If module is invalid.
+            django.core.management.base.CommandError: With descriptive messages
+                iff module is invalid.
 
         """
         self.stdout.write('Validating module models: ', ending='')
@@ -135,44 +177,35 @@ class Command(BaseCommand):
         except TypeError as type_error:
             self._raise_command_error(type_error)
 
-        # Elements of iterable are present and of correct type. This smells.
-        error_format_string = (
-            'No {model} instances returned by ' +
-            module.__name__ + '.get_models().')
-        error_message = error_format_string.format(model='DocumentsLanguages')
-        for model in module_models:
-            if not isinstance(model, docsnaps.models.DocumentsLanguages):
-                error_message = error_format_string.format(
-                    model='DocumentsLanguages')
-                break
-            elif (not hasattr(model, 'language_id') or
-                not isinstance(model.language_id, docsnaps.models.Language)):
-                error_message = error_format_string.format(model='Language')
-                break
-            elif (not hasattr(model, 'document_id') or
-                not isinstance(model.document_id, docsnaps.models.Document)):
-                error_message = error_format_string.format(model='Document')
-                break
-            elif (not hasattr(model.document_id, 'service_id') or
-                not isinstance(
-                    model.document_id.service_id,
-                    docsnaps.models.Service)):
-                error_message = error_format_string.format(model='Service')
-                break
-            elif (not hasattr(model.document_id.service_id, 'company_id') or
-                not isinstance(
-                    model.document_id.service_id.company_id,
-                    docsnaps.models.Company)):
-                error_message = error_format_string.format(model='Company')
-                break
-            else:
-                error_message = None
+        # Return value is not empty.
+        if not module_models:
+            self._raise_command_error(
+                module.__name__ + '.get_models() returned an empty iterable.')
 
-        # Note: if the iterable returned by the module was empty, then the loop
-        # above will not have made an iteration. This raises an exception with
-        # the default value of the error message above.
-        if error_message:
-            self._raise_command_error(error_message)
+        # Return value is an iterable of correct types and full model
+        # relationship trees are provided.
+        required_classes = {
+            docsnaps.models.Company,
+            docsnaps.models.Service,
+            docsnaps.models.Document,
+            docsnaps.models.Language,
+            docsnaps.models.DocumentsLanguages}
+        for model in module_models:
+            if isinstance(model, docsnaps.models.DocumentsLanguages):
+                returned_classes = set([m.__class__ for m \
+                    in self._get_relation_tree(model)])
+                diff = required_classes.difference(returned_classes)
+                if diff:
+                    self._raise_command_error(
+                        module.__name__ + '.get_models() returned instance ' +
+                        str(model) + ', the model relationships under which '
+                        'are missing at least one instance of the following '
+                        'models: ' + ', '.join(map(str, diff)))
+            else:
+                self._raise_command_error(
+                    module.__name__ + '.get_models() '
+                    'returned incorrect type "' + str(type(model)) + '" '
+                    'in iterable.')
 
         self.stdout.write(self.style.SUCCESS('success'))
 

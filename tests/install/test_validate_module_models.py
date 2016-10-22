@@ -127,7 +127,7 @@ class TestValidateModuleModels(SimpleTestCase):
 
         self.assertRaisesRegex(
             CommandError,
-            re.compile(r'.*DocumentsLanguages.*', flags=re.IGNORECASE),
+            re.compile(r'.*type.*', flags=re.IGNORECASE),
             self._command._validate_module_models,
             self._module)
         self.assertIn('failed', self._command.stdout.getvalue())
@@ -143,8 +143,7 @@ class TestValidateModuleModels(SimpleTestCase):
             'Language',
             'Company',
             'Service',
-            'Document',
-            'DocumentsLanguages']
+            'Document']
         for model_name in model_names:
             with self.subTest(missing_model=model_name):
                 self._module.get_models.return_value = self._get_models(
