@@ -216,7 +216,7 @@ class Language(models.Model):
     documents = models.ManyToManyField('Document', through='DocumentsLanguages')
 
     def __str__(self):
-        return self.name
+        return self.code_iso_639_1
 
     class Meta:
         db_table = 'language'
@@ -238,6 +238,9 @@ class Document(models.Model):
         blank=False, default=None, max_length=255, null=False)
     updated_timestamp = MariadbTimestampField(auto_now=True)
     languages = models.ManyToManyField(Language, through='DocumentsLanguages')
+
+    def __str__(self):
+        return self.name
 
     class Meta:
         db_table = 'document'
@@ -314,24 +317,40 @@ class Transform(models.Model):
     This table is designed to relate plugin modules and their supplied
     transforms to the documents they registered when installed.
 
-    Using a separate table rather than adding "module" to DocumentsLanguages
-    allows for more flexible relationships and for chained transforms.
-
-    Natural key: the unique combination of documents_languages_id and module.
+    Natural key: the unique combination of document and module.
     There is currently no correct reason to double-register a module for the
-    same snapshot job.
+    same snapshot job. When a plugin module's transform is passed data from a
+    recent snapshot, it can internally differentiate between the document's
+    language or other data. There is no reason to tie this relationship to the
+    higher cardinality of DocumentsLanguages.
+
+    The module field will contain absolute, fully-qualified module names that
+    can be directly passed to importlib. Do not include the module's transform
+    callable attribute in the name as that is part of the standardized interface
+    and will be called automatically.
+
+    Using a separate table rather than adding "module" to Documents
+    allows for more flexible relationships, the addition of dependent fields,
+    and for chained transform "pipelines" (see below).
+
+    Execution priority exists so that multiple plugin modules can register to
+    transform the same document. This forms a transform "pipeline" and allows
+    altering transforms without having to edit third-party plugin module code.
+    This field will largely be manually managed by the user. All records with
+    identical priority returned by a given query will be sorted in arbitrary
+    order to be determined by the DBMS.
 
     """
 
     transform_id = models.AutoField(primary_key=True)
-    documents_languages_id = models.ForeignKey(
-        DocumentsLanguages, db_column='documents_languages_id',
-        on_delete=models.PROTECT, verbose_name='document instance')
+    document_id = models.ForeignKey(
+        Document, db_column='document_id',
+        on_delete=models.PROTECT, verbose_name='document')
     module = models.CharField(
         blank=False, default=None, max_length=255, null=False)
     execution_priority = models.SmallIntegerField(default=0, null=False)
 
     class Meta:
         db_table = 'transform'
-        unique_together = ('documents_languages_id', 'module')
+        unique_together = ('document_id', 'module')
 
