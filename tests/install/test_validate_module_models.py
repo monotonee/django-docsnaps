@@ -1,11 +1,10 @@
 """
-Tests for the "install" subcommand's _validate_module_models method.
+Tests the "install" subcommand's _validate_module_models method.
 
 """
 
 import io
 import re
-import types
 import unittest.mock as mock
 
 from django.core.management.base import CommandError
