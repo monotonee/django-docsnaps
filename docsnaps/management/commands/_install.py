@@ -12,12 +12,14 @@ All necessary data for the new job is loaded into the database.
 """
 from collections import deque
 from importlib import import_module
+from types import ModuleType
 
-from django.apps import apps
+from django.core.exceptions import MultipleObjectsReturned
 from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
 from django.db.models.fields.related import ForeignKey
 
-import docsnaps.models
+from docsnaps import models
 
 
 class Command(BaseCommand):
@@ -26,7 +28,7 @@ class Command(BaseCommand):
 
     def _get_relation_tree(self, model):
         """
-        A generator method that recursively yields model instances.
+        Recursively yield related model instances.
 
         The chain of relationship fields in a model form a tree structure.
         The plugin modules' get_models() function returns an iterable of what
@@ -42,12 +44,12 @@ class Command(BaseCommand):
         relationship fields, not reverse relationship fields.
 
         Args:
-            model (docsnaps.models.DocumentsLanguages): A "child"
+            model (models.DocumentsLanguages): A "child"
                 model instance, the relationship fields of which will be
                 traversed up the tree.
 
         Yields:
-            docsnaps.models.*: Each model instance of each relationship field
+            models.*: Each model instance of each relationship field
                 in the model tree, depth-first.
 
         See:
@@ -87,6 +89,9 @@ class Command(BaseCommand):
         else:
             self.stdout.write(self.style.SUCCESS('success'))
             return module
+
+    def _load_models(self, module):
+        self.stdout.write('Loading module data: ', ending='')
 
     def _raise_command_error(self, message):
         """
@@ -185,13 +190,13 @@ class Command(BaseCommand):
         # Return value is an iterable of correct types and full model
         # relationship trees are provided.
         required_classes = {
-            docsnaps.models.Company,
-            docsnaps.models.Service,
-            docsnaps.models.Document,
-            docsnaps.models.Language,
-            docsnaps.models.DocumentsLanguages}
+            models.Company,
+            models.Service,
+            models.Document,
+            models.Language,
+            models.DocumentsLanguages}
         for model in module_models:
-            if isinstance(model, docsnaps.models.DocumentsLanguages):
+            if isinstance(model, models.DocumentsLanguages):
                 returned_classes = set([m.__class__ for m \
                     in self._get_relation_tree(model)])
                 diff = required_classes.difference(returned_classes)
@@ -236,6 +241,7 @@ class Command(BaseCommand):
         module = self._import_module(options['module'])
         self._validate_module_interface(module)
         self._validate_module_models(module)
+        self._load_models(module)
 
 
         # import pdb
@@ -254,6 +260,167 @@ class Command(BaseCommand):
             # Make sure to respect --disabled choice.
             # If storage error, roll back transaction and raise exception.
 
+
+class ModelLoader:
+    """
+    A helper class that handles loading of models provided by a plugin module.
+
+    Given a DocumentsLanguages instance, its relationship tree is traversed and
+    new models are inserted. Edge cases and exceptional conditions are accounted
+    for and, if exceptions are raised, they are allowed to bubble to next stack
+    frame.
+
+    Loading attempted upon instance initialization. The entire loading operation
+    is an atomic operation. Either all models are loaded or none are.
+
+    This class is designed for use within the context of this module. No
+    constructor argument checking is performed. All plugin module validation is
+    assumed to have been done prior to the calling of this class.
+
+    Attributes:
+        warnings (sequence): A sequence of warning strings suitable for stdout.
+
+    """
+
+    def __init__(self, module, model):
+        """
+        Initialize model.
+
+        Args:
+            module (module): A module object as returned by importlib.
+            model (docsnaps.models.DocumentsLanguages)
+
+        Raises:
+            ValueError: If model argument is instance of incorrect model.
+
+        """
+        if not isinstance(module, ModuleType):
+            raise ValueError(
+                'Passed module must be ModuleType instance.')
+        if not isinstance(model, models.DocumentsLanguages):
+            raise ValueError(
+                'Passed model must be DocumentsLanguages instance.')
+
+        self._model = model
+        self._module = module
+        self.warnings = []
+
+        self._load()
+
+    def _generate_warning(self, existing_model, new_model, field_names):
+        """
+        Create a warning string.
+
+        Creates warning strings to provide output from the loading process. A
+        warning is output when a model already exists in the database with
+        one or more different non-key field values.
+
+        Both arguments should be the same model type.
+
+        Args:
+            existing_model (docsnaps.models.*): A model instance of the existing
+                record. Must be instance of same model as new_model.
+            new_model (docsnaps.models.*): A model instance of the new record.
+                Must be instance of same model as existing_model.
+            field_names (iterable): The names of the fields the values of which
+                are different between the two models.
+
+        Returns:
+            string: A string to be written to stdout.
+
+        """
+        warning = (
+            'Existing ' + str(existing_model) + ' found with different field '
+            'values. Existing record will not be updated. ')
+        for field_name in field_names:
+            warning += (
+                'Existing "' + field_name + '" value: "'
+                + getattr(existing_model, field_name) + '".')
+            warning += (
+                'Discarded "' + field_name + '" value: "'
+                + getattr(new_model, field_name) + '".')
+
+        return warning
+
+    def _load(self):
+        """
+        Attempt to load a model relationship tree into database.
+
+        If a record already exists in the database for a given entity, then
+        the record is left unchanged and is not updated. This makes the load
+        operation repeatable with no side effects.
+
+        I opted to write this explicitly. The method becomes longer and less
+        elegant but is easier to read and debug.
+
+        This method does NOT catch exceptions. Exceptions bubble to next stack
+        frame, first passing through the atomic context and rolling back the
+        transaction.
+
+        """
+        with transaction.atomic():
+
+            # Company
+            new_company = self._model.document_id.service_id.company_id
+            company, created = models.Company.objects.get_or_create(
+                name=new_company.name,
+                defaults={'website': new_company.website})
+            if new_company.website != company.website:
+                self.warnings.append(
+                    self._generate_warning(company, new_company, ['website']))
+
+            # Service
+            new_service = self._model.document_id.service_id
+            service, created = models.Service.objects.get_or_create(
+                name=new_service.name,
+                company_id=company,
+                defaults={'website': new_service.website})
+            if new_service.website != service.website:
+                self.warnings.append(
+                    self._generate_warning(service, new_service, ['website']))
+
+            # Document
+            new_document = self._model.document_id
+            document, created = models.Document.objects.get_or_create(
+                name=new_document.name,
+                service_id=service)
+
+            # Language
+            new_language = self._model.language_id
+            language, created = models.Language.objects.get_or_create(
+                code_iso_639_1=new_language.code_iso_639_1,
+                defaults={'name': new_language.name})
+            if new_language.name != language.name:
+                self.warnings.append(
+                    self._generate_warning(language, new_language, ['name']))
+
+            # DocumentsLanguages
+            new_docs_langs = self._model
+            docs_langs, created = models.Language.objects.get_or_create(
+                document_id=document,
+                language_id=language,
+                defaults={'url': new_docs_langs.url, 'is_enabled': True})
+            differing_fields = []
+            if (new_docs_langs.url != docs_langs.url:
+                differing_fields.append('url')
+            elif new_docs_langs.is_enabled != docs_langs.is_enabled:
+                differing_fields.append('is_enabled')
+            if differing_fields:
+                self.warnings.append(
+                    self._generate_warning(
+                        docs_langs,
+                        new_docs_langs,
+                        differing_fields))
+
+            # Transform
+            transform, created = models.Transform.objects.get_or_create(
+                document_id=document,
+                language_id=self._module.__name__)
+            if not created:
+                self.warnings.append(
+                    'Module ' + self._module.__name__ + ' already registered '
+                    'transform for ' + str(document) + '. Check that execution '
+                    'priority is set correctly.')
 
 
 
