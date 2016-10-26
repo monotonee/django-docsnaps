@@ -335,10 +335,10 @@ class ModelLoader:
         for field_name in field_names:
             warning += (
                 'Existing "' + field_name + '" value: "'
-                + getattr(existing_model, field_name) + '".')
+                + str(getattr(existing_model, field_name)) + '".')
             warning += (
                 'Discarded "' + field_name + '" value: "'
-                + getattr(new_model, field_name) + '".')
+                + str(getattr(new_model, field_name)) + '".')
 
         return warning
 
@@ -396,12 +396,14 @@ class ModelLoader:
 
             # DocumentsLanguages
             new_docs_langs = self._model
-            docs_langs, created = models.Language.objects.get_or_create(
+            docs_langs, created = models.DocumentsLanguages.objects.get_or_create(
                 document_id=document,
                 language_id=language,
-                defaults={'url': new_docs_langs.url, 'is_enabled': True})
+                defaults={
+                    'url': new_docs_langs.url,
+                    'is_enabled': new_docs_langs.is_enabled})
             differing_fields = []
-            if (new_docs_langs.url != docs_langs.url:
+            if new_docs_langs.url != docs_langs.url:
                 differing_fields.append('url')
             elif new_docs_langs.is_enabled != docs_langs.is_enabled:
                 differing_fields.append('is_enabled')
@@ -415,7 +417,7 @@ class ModelLoader:
             # Transform
             transform, created = models.Transform.objects.get_or_create(
                 document_id=document,
-                language_id=self._module.__name__)
+                module=self._module.__name__)
             if not created:
                 self.warnings.append(
                     'Module ' + self._module.__name__ + ' already registered '
