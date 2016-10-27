@@ -286,6 +286,12 @@ class ModelLoader:
         """
         Initialize model.
 
+        Attributes:
+            load_successful (boolean): Set to true when or if load completes.
+                False otherwise.
+            warnings (sequence): A sequence of strings, each containing a
+                warning intended for output to stdout.
+
         Args:
             module (module): A module object as returned by importlib.
             model (docsnaps.models.DocumentsLanguages)
@@ -303,6 +309,7 @@ class ModelLoader:
 
         self._model = model
         self._module = module
+        self.load_successful = False
         self.warnings = []
 
         self._load()
@@ -420,9 +427,11 @@ class ModelLoader:
                 module=self._module.__name__)
             if not created:
                 self.warnings.append(
+                    transform.__class__.__name__ + ': '
                     'Module ' + self._module.__name__ + ' already registered '
-                    'transform for ' + str(document) + '. Check that execution '
-                    'priority is set correctly.')
+                    'transform for ' + str(document) + '.')
+
+            self.load_successful = True
 
 
 
