@@ -11,12 +11,10 @@ AUTO_INCREMENT values, for instance.
 
 """
 
-import importlib
 import io
 from types import ModuleType
 import unittest.mock as mock
 
-from django.core.management.base import CommandError
 from django.test import TransactionTestCase
 
 from .. import utils as test_utils
