@@ -18,6 +18,8 @@ setup(
     include_package_data=True,
     install_requires=[
         'django',
+        'mysqlclient',
+        'requests',
     ],
     license='MIT',
     packages=find_packages(),
