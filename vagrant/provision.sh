@@ -10,7 +10,7 @@
 # dependencies require user interaction beyond a simple confirmation of yes or
 # no (such as the "java-runtime" virtual package), one may explcitly include
 # them here.
-extra_pkgs=( geany libmariadbclient libxtst mysql-workbench proj python-pip ttf-dejavu xorg-xauth )
+extra_pkgs=( geany libmariadbclient libxtst mysql-workbench proj python python-pip ttf-dejavu xorg-xauth )
 aur_pkgs=()
 
 # This script is executed on the guest machine via Vagrant's shell provisioner.
@@ -109,7 +109,7 @@ done
 
 # Project-specific tasks
 echo 'TASK: Install Python packages and modules.'
-su vagrant -l -c 'pip install --user -r src/requirements.txt'
+su vagrant -l -c 'cd src && pip install --user -r requirements/dev.txt'
 
 # Reboot system.
 # Actual reboot removed for now since rebooting outside of Vagrant's control
