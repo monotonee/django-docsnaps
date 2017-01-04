@@ -1,3 +1,8 @@
+"""
+Note that include_package_data enables MANIFEST.in consumption.
+
+"""
+
 import os
 from setuptools import find_packages, setup
 
