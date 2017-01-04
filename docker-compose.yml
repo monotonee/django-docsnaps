@@ -3,7 +3,6 @@
 # Sensitive settings are saved in plain text here. Do not use in production.
 # MYSQL_ALLOW_EMPTY_PASSWORD allows empty password for root user.
 # Random ephemeral port chosen on container host to avoid conflicts.
-# Run Django migration and load fixtures to prepare DB for testing.
 # If one doesn't want SQLite for testing, this provides an easy alternative.
 version: '2'
 services:

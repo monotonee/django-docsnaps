@@ -22,6 +22,12 @@ default_user='vagrant'
 home_dir=/home/${default_user}
 src_dir=/vagrant
 
+echo 'TASK: Synchronize package databases'
+pacman -Syy --noconfirm --quiet
+
+echo 'TASK: Update Arch keyring'
+pacman -S archlinux-keyring --noconfirm --quiet
+
 # Upgrade the system.
 # Sometimes kernel upgrades require initial ramdisk rebuild to detect devices.
 echo 'TASK: Full system upgrade'
