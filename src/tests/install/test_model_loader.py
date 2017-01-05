@@ -44,7 +44,7 @@ class TestModelLoader(TransactionTestCase):
         document = self._docs_langs.document_id
         language = self._docs_langs.language_id
 
-        model_loader = ModelLoader(self._module, self._docs_langs)
+        model_loader = ModelLoader(self._docs_langs, self._module.__name__)
         result = models.DocumentsLanguages.objects.select_related().filter(
             document_id=document,
             language_id=language)
@@ -75,7 +75,7 @@ class TestModelLoader(TransactionTestCase):
         document = self._docs_langs.document_id
         language = self._docs_langs.language_id
 
-        model_loader_1 = ModelLoader(self._module, self._docs_langs)
+        model_loader_1 = ModelLoader(self._docs_langs, self._module.__name__)
         result_1 = models.DocumentsLanguages.objects.select_related().filter(
             document_id=document,
             language_id=language)
@@ -84,7 +84,7 @@ class TestModelLoader(TransactionTestCase):
             document_id=document,
             module=self._module.__name__)
 
-        model_loader_2 = ModelLoader(self._module, self._docs_langs)
+        model_loader_2 = ModelLoader(self._docs_langs, self._module.__name__)
         result_2 = models.DocumentsLanguages.objects.select_related().filter(
             document_id=document,
             language_id=language)

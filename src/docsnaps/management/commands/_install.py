@@ -20,55 +20,16 @@ from django.db import transaction
 from django.db.models.fields.related import ForeignKey
 
 from docsnaps import models
+from docsnaps.management.commands._utils import flatten_model_graph
 
 
 class Command(BaseCommand):
 
     help = 'Installs a new snapshot job and registers its transforms.'
 
-    def _get_relation_tree(self, model):
-        """
-        Recursively yield related model instances.
-
-        The chain of relationship fields in a model form a tree structure.
-        The plugin modules' get_models() function returns an iterable of what
-        equates to the deepest nodes in their respective "trees." This method
-        yields each model in the relationship trees in a depth-first manner.
-
-        For instance, the DocumentsLanguages models have two relationship
-        (ForeignKey) fields: a Document and a Language. This generator will
-        first yield the DocumentsLanguages instance before yielding the "child"
-        Document and Language instances.
-
-        Since this method yields depth first, it tests for instances of
-        relationship fields, not reverse relationship fields.
-
-        Args:
-            model (models.DocumentsLanguages): A "child"
-                model instance, the relationship fields of which will be
-                traversed up the tree.
-
-        Yields:
-            models.*: Each model instance of each relationship field
-                in the model tree, depth-first.
-
-        See:
-            https://github.com/django/django/blob/master/django/db/models/fields/related.py
-            https://github.com/django/django/blob/master/django/db/models/fields/reverse_related.py
-
-        """
-        model_queue = deque([model])
-        while model_queue:
-            current_model = model_queue.popleft()
-            for field in current_model._meta.get_fields():
-                if (isinstance(field, ForeignKey)
-                    and hasattr(current_model, field.name)):
-                    model_queue.append(getattr(current_model, field.name))
-            yield current_model
-
     def _import_module(self, module_name):
         """
-        Attempts to load the module passed as an argument to the subcommand.
+        Attempt to load the module passed as an argument to the subcommand.
 
         Args:
             module_name (string): The fully-qualified, absolute name of the
@@ -95,11 +56,11 @@ class Command(BaseCommand):
 
     def _raise_command_error(self, message):
         """
-        Raises a CommandError and writes a failure string to stdout.
+        Raise a CommandError and writes a failure string to stdout.
 
         Within this command class, the pattern of raising the CommandError and
         finishing a stdout string with a failure message is repeated
-        consistently.
+        consistently. Thus, this method.
 
         Args:
             message (string or Exception): The message to pass to the exception
@@ -116,7 +77,7 @@ class Command(BaseCommand):
 
     def _validate_module_interface(self, module):
         """
-        Check module interface and validate models provided by imported module.
+        Check module interface of imported module.
 
         The goal in validating the module is not to attempt to circumvent
         Pythonic duck typing, but to generate helpful error messages for plugin
@@ -154,15 +115,15 @@ class Command(BaseCommand):
 
         Checks for the full model relationship tree, from Company to
         DocumentsLanguages. The plugin module must provide an iterable of
-        DocumentsLanguages instances the relationship fields of which will be
+        DocumentsLanguages instances, the relationship fields of which will be
         traversed.
 
-        The goal in validating the module is not to attempt to circumvent
+        The goal in validating the models is not to attempt to circumvent
         Pythonic duck typing, but to generate helpful error messages for plugin
         developers.
 
         It is best to call this after validating module interface in order to
-        avoid AttributeErrors.
+        avoid potential AttributeErrors.
 
         Args:
             module: The imported plugin module as returned by importlib.
@@ -176,19 +137,19 @@ class Command(BaseCommand):
 
         module_models = module.get_models()
 
-        # Return value is an iterable.
+        # Ensure returned models value is not empty.
+        if not module_models:
+            self._raise_command_error(
+                module.__name__ + '.get_models() returned an empty iterable.')
+
+        # Ensure returned models value is an iterable.
         try:
             iter(module_models)
         except TypeError as type_error:
             self._raise_command_error(type_error)
 
-        # Return value is not empty.
-        if not module_models:
-            self._raise_command_error(
-                module.__name__ + '.get_models() returned an empty iterable.')
-
-        # Return value is an iterable of correct types and full model
-        # relationship trees are provided.
+        # Ensure returned models value is an iterable of correct types and
+        # minimum necessary model relationship trees are provided.
         required_classes = {
             models.Company,
             models.Service,
@@ -197,8 +158,8 @@ class Command(BaseCommand):
             models.DocumentsLanguages}
         for model in module_models:
             if isinstance(model, models.DocumentsLanguages):
-                returned_classes = set([m.__class__ for m \
-                    in self._get_relation_tree(model)])
+                returned_classes = set(
+                    [m.__class__ for m in flatten_model_graph(model)])
                 diff = required_classes.difference(returned_classes)
                 if diff:
                     self._raise_command_error(
@@ -221,9 +182,7 @@ class Command(BaseCommand):
             type=str)
         parser.add_argument(
             '-d', '--disabled',
-            action='store_const',
-            const=True,
-            default=False,
+            action='store_true',
             help='Install new doc snapshot job but leave it disabled.')
 
     def handle(self, *args, **options):
@@ -267,48 +226,36 @@ class ModelLoader:
 
     Given a DocumentsLanguages instance, its relationship tree is traversed and
     new models are inserted. Edge cases and exceptional conditions are accounted
-    for and, if exceptions are raised, they are allowed to bubble to next stack
-    frame.
+    for and, if exceptions are raised, they are allowed to bubble.
 
     Loading attempted upon instance initialization. The entire loading operation
     is an atomic operation. Either all models are loaded or none are.
 
-    This class is designed for use within the context of this module. No
-    constructor argument checking is performed. All plugin module validation is
-    assumed to have been done prior to the calling of this class.
+    This class is designed for use within the context of this module. All plugin
+    module validation is assumed to have been done prior to the instantiation of
+    this class.
 
     Attributes:
+        load_successful (boolean): Set to true when or if load completes.
+                False otherwise.
         warnings (sequence): A sequence of warning strings suitable for stdout.
 
     """
 
-    def __init__(self, module, model):
+    def __init__(self, model, module_name: str):
         """
-        Initialize model.
-
-        Attributes:
-            load_successful (boolean): Set to true when or if load completes.
-                False otherwise.
-            warnings (sequence): A sequence of strings, each containing a
-                warning intended for output to stdout.
+        Initialize an instance.
 
         Args:
-            module (module): A module object as returned by importlib.
+            module (module): A module object as returned by importlib. The
+                module from which the model was returned. The module name is
+                used to populate database records.
             model (docsnaps.models.DocumentsLanguages)
 
-        Raises:
-            ValueError: If model argument is instance of incorrect model.
-
         """
-        if not isinstance(module, ModuleType):
-            raise ValueError(
-                'Passed module must be ModuleType instance.')
-        if not isinstance(model, models.DocumentsLanguages):
-            raise ValueError(
-                'Passed model must be DocumentsLanguages instance.')
 
         self._model = model
-        self._module = module
+        self._module_name = module_name
         self.load_successful = False
         self.warnings = []
 
@@ -355,14 +302,29 @@ class ModelLoader:
 
         If a record already exists in the database for a given entity, then
         the record is left unchanged and is not updated. This makes the load
-        operation repeatable with no side effects.
+        operation repeatable with no side effects. A warning is issued if the
+        existing record's non-key attributes differ from the incoming record.
 
-        I opted to write this explicitly. The method becomes longer and less
-        elegant but is easier to read and debug.
+        I opted to write this explicitly. The method becomes longer, less
+        elegant, and possibly more time-consuming to maintain with model changes
+        but is easier to read and debug. I'll observe the future consequences of
+        this choice.
+
+        To make this dynamic and more immune to model changes, this operation
+        would be converted into a relationship graph traversal algorithm that
+        automatically distinguishes non-key model fields and can determine the
+        type of model class to instantiate for the new record by the class of
+        the passed model.
 
         This method does NOT catch exceptions. Exceptions bubble to next stack
         frame, first passing through the atomic context and rolling back the
         transaction.
+
+        New models are created for the insert operation so that, if a record
+        already exists, the inbound and existing data can be compared.
+
+        See:
+            https://docs.djangoproject.com/en/dev/ref/models/querysets/#get-or-create
 
         """
         with transaction.atomic():
@@ -424,11 +386,11 @@ class ModelLoader:
             # Transform
             transform, created = models.Transform.objects.get_or_create(
                 document_id=document,
-                module=self._module.__name__)
+                module=self._module_name)
             if not created:
                 self.warnings.append(
                     transform.__class__.__name__ + ': '
-                    'Module ' + self._module.__name__ + ' already registered '
+                    'Module ' + self._module_name + ' already registered '
                     'transform for ' + str(document) + '.')
 
             self.load_successful = True
