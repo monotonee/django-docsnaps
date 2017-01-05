@@ -47,9 +47,6 @@ def flatten_model_graph(model):
         https://github.com/django/django/blob/master/django/db/models/fields/reverse_related.py
 
     """
-    if not isinstance(model, DocumentsLanguages):
-        raise ValueError('Argument must be a DocumentsLanguages instance.')
-
     model_queue = deque([model])
     while model_queue:
         current_model = model_queue.popleft()

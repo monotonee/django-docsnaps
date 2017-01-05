@@ -31,19 +31,3 @@ class TestModelRelationFlattening(SimpleTestCase):
 
         # List equality also compares order.
         self.assertEqual(flattened, expected)
-
-    def test_incorrect_argument(self):
-        """
-        Test that the function only accepts instance of the correct model.
-
-        Because the subject of the tests is a generator, no code is executed
-        until next() has been called at least once. We need to execute all
-        iterations of the function until StopIteration is raised.
-
-        """
-        document = test_utils.get_test_models()[0].document_id
-
-        self.assertRaises(
-            ValueError,
-            list,
-            command_utils.flatten_model_graph(document))
