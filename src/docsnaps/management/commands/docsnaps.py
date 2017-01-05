@@ -44,12 +44,15 @@ class Command(BaseCommand):
         here despite the slight semantic mismatch of the task.
 
         The subparser's parser_class argument is necessary because Django has
-        extended the argparse.ArgumentParser class and changed its interface.
-        When add_parser() is called on the subparsers object, it attempts to
-        instantiate Django's custom class rather than argparse's.
+        extended the argparse.ArgumentParser class and changed its constructor
+        signature. When add_parser() is called on the subparsers object, it
+        attempts to instantiate Django's custom class rather than argparse's.
+
+        The add_arguments function is a Django addition to the
+        argparse.ArgumentParser interface.
 
         See:
-            https://docs.python.org/3.5/library/argparse.html#argparse.ArgumentParser.add_subparsers
+            https://docs.python.org/3/library/argparse.html#argparse.ArgumentParser.add_subparsers
             https://github.com/django/django/blob/master/django/core/management/base.py#L43
 
         """

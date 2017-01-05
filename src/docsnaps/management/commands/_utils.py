@@ -15,13 +15,16 @@ def flatten_model_graph(model):
     Recursively yield related model instances in a relationship graph.
 
     Technically, a ForeignKey relationship is always going to be a tree rather
-    than a generic graph, but this name keeps things more flexible and isn't
-    inaccurate.
+    than a generic graph, but this name keeps things more flexible for future
+    changes to entity relationshisps and isn't technically inaccurate.
 
     The chain of relationship fields in a model form a graph structure.
     The plugin modules' get_models() function returns an iterable of what
-    equates to the deepest nodes in their respective "graphs." This method
-    yields each model in the relationship graph in a depth-first manner.
+    equates to the deepest nodes in their respective, logical "graphs." By this
+    metric, this method yields each model in the relationship graph in a
+    reverse breadth-first/level-order manner. However, if one considers the
+    passed model class the root node, then this method would be yield each model
+    in the graph in a standard breadth-first manner.
 
     For instance, the DocumentsLanguages models have two parent (ForeignKey)
     fields: a Document and a Language. This generator will first yield the

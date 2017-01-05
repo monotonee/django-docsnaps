@@ -6,6 +6,7 @@ use of Django testing tools.
 
 See:
     https://docs.djangoproject.com/en/dev/topics/testing/advanced/#using-the-django-test-runner-to-test-reusable-applications
+    https://github.com/django/django/blob/master/django/test/runner.py#L392
 
 """
 

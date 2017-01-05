@@ -27,8 +27,7 @@ class TestModelRelationFlattening(SimpleTestCase):
             docs_langs.language_id,
             docs_langs.document_id.service_id,
             docs_langs.document_id.service_id.company_id]
-        flattened = list(
-            command_utils.flatten_model_graph(docs_langs))
+        flattened = list(command_utils.flatten_model_graph(docs_langs))
 
         # List equality also compares order.
         self.assertEqual(flattened, expected)
