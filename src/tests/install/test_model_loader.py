@@ -105,13 +105,6 @@ class TestModelLoader(TransactionTestCase):
             list(command_utils.flatten_model_graph(result_2.first())),
             list(command_utils.flatten_model_graph(self._docs_langs)))
 
-    def test_argument_validation(self):
-        """
-        Test that argument type checking raises exceptions correctly.
-
-        """
-        raise NotImplementedError('Finish this test.')
-
     def test_transaction_rollback(self):
         """
         Test that the entire load is rolled back on any exception.
