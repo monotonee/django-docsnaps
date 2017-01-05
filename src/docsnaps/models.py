@@ -42,6 +42,10 @@ class FixedCharField(models.CharField):
     """
     Stores Python strings in fixed-length "char" database fields.
 
+    Databases should be a self-documenting and semantic as possible, independent
+    of any application code. I will not compromise this for the sake of Django's
+    incomplete abstraction layer.
+
     CharField's max_length kwarg is kept for simplicity. In this class, the
     value of max_length will be the length of the char field.
 
