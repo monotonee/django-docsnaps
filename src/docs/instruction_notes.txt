@@ -1,0 +1,4 @@
+behavior of "disabled" CLI argument.
+    Values of Documentslanguages instances passed from plugin modules are ignored
+    Default value is False. Job will be inserted as enabled.
+    If flag is passed to CLI command, will insert job as disabled instead.
