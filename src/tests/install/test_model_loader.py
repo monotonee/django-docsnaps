@@ -19,12 +19,33 @@ import io
 from types import ModuleType
 import unittest.mock as mock
 
+import django.db
+import django.core.management.base
 from django.test import TransactionTestCase
 
 from .. import utils as test_utils
 from docsnaps.management.commands._install import Command, ModelLoader
 import docsnaps.management.commands._utils as command_utils
 import docsnaps.models as models
+
+
+class TransactionTestMock(mock.NonCallableMock):
+    """
+    A class to allow side effects in mock attribute access.
+
+    Designed for a specific test of the transaction rollbacks as a result of
+    raised exceptions.
+
+    I may have missed it in the documentation or not yet discovered the
+    canonical way to do it, but it appears that side effects cannot be related
+    to unittest.mock attrbute access operations. I don't want to mess with
+    magic methods so this local class will do for now.
+
+    """
+
+    @property
+    def url(self):
+        raise django.db.Error
 
 
 class TestModelLoader(TransactionTestCase):
@@ -104,12 +125,26 @@ class TestModelLoader(TransactionTestCase):
         module, with the last one raising an exception. All successfully-
         inserted data should also be rolled back.
 
-        Consider switching tests to _load method instead of class.
-
-        Check that command throws CommandError.
-
         """
-        raise NotImplementedError('Finish this test.')
+        # Configure the mock module to return two models instead of one.
+        # The first model will be successful, the second will raise exception.
+        duplicate_docslangs = TransactionTestMock(
+            spec_set=models.DocumentsLanguages)
+        attributes = {
+            'document_id': self._docs_langs.document_id,
+            'language_id': self._docs_langs.language_id
+        }
+        duplicate_docslangs.configure_mock(**attributes)
+        self._module.get_models.return_value = (
+            self._docs_langs, duplicate_docslangs)
+
+        # Verify that the proper exception is re-raised.
+        with self.assertRaises(django.core.management.base.CommandError):
+            self._command._load_models(self._module)
+
+        # Verify that the transaction was rolled back.
+        result_set = models.DocumentsLanguages.objects.select_related().all()
+        self.assertEqual(len(result_set), 0)
 
     def test_existing_record_warnings(self):
         """

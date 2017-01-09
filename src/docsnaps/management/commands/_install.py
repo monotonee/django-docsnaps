@@ -57,6 +57,9 @@ class Command(BaseCommand):
 
         All of the module's data is loaded in a transaction.
 
+        Only one exception can be a thread at a given time. Defer raising
+        CommandError until after exiting try:except block.
+
         Args:
             module: The imported plugin module as returned by importlib.
             disabled (bool): The value of the subcommand's "disabled" flag.
@@ -66,6 +69,7 @@ class Command(BaseCommand):
 
         """
         self.stdout.write('Attempting to load module data: ', ending='')
+        command_error_message = None
         try:
             with django.db.transaction.atomic():
                 for model in module.get_models():
@@ -73,17 +77,20 @@ class Command(BaseCommand):
                         model,
                         module.__name__,
                         disabled=disabled)
-        except django.core.exceptions.MultipleObjectsReturned as exception:
-            self._raise_command_error(
+        except django.core.exceptions.MultipleObjectsReturned:
+            command_error_message = (
                 'Multiple identical records returned for this module\'s data.'
                 'This indicates a data integrity violations in the database.')
         except django.db.Error as exception:
-            self._raise_command_error(
+            command_error_message = (
                 'A database error occurred: ' + str(exception))
-        else:
-            for warning in model_loader.warnings:
-                self.stdout.write(self.style.WARNING('warning: ') + warning)
-            self.stdout.write(self.style.SUCCESS('success'))
+
+        if command_error_message:
+                self._raise_command_error(command_error_message)
+
+        for warning in model_loader.warnings:
+            self.stdout.write(self.style.WARNING('warning: ') + warning)
+        self.stdout.write(self.style.SUCCESS('success'))
 
     def _raise_command_error(self, message):
         """
