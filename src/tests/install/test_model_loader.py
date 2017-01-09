@@ -32,6 +32,11 @@ import docsnaps.models as models
 class TestModelLoader(TransactionTestCase):
 
     def setUp(self):
+        """
+        Capture stdout output to string buffer instead of allowing it to be
+        sent to actual terminal stdout.
+
+        """
         self._command = Command(stdout=io.StringIO(), stderr=io.StringIO())
         self._models = test_utils.get_test_models()
         self._docs_langs = self._models[0]
@@ -135,7 +140,17 @@ class TestModelLoader(TransactionTestCase):
         one knows exactly where to begin looking for other test failures.
 
         """
-        raise NotImplementedError('Finish this test.')
+        # Configure the mock module to return two models instead of one.
+        duplicate_docslangs = models.DocumentsLanguages(
+            document_id=self._docs_langs.document_id,
+            language_id=self._docs_langs.language_id,
+            url='should.be.discarded')
+        self._module.get_models.return_value = (
+            self._docs_langs, duplicate_docslangs)
+
+        self._command._load_models(self._module)
+
+        self.assertEqual(self._command.stdout.getvalue().count('warning:'), 2)
 
     def test_disabled_flag(self):
         """

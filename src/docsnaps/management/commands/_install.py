@@ -88,9 +88,9 @@ class Command(BaseCommand):
         if command_error_message:
                 self._raise_command_error(command_error_message)
 
+        self.stdout.write(self.style.SUCCESS('success'))
         for warning in model_loader.warnings:
             self.stdout.write(self.style.WARNING('warning: ') + warning)
-        self.stdout.write(self.style.SUCCESS('success'))
 
     def _raise_command_error(self, message):
         """
@@ -323,7 +323,7 @@ class ModelLoader:
         for field_name in field_names:
             warning += (
                 'Existing "' + field_name + '" value: "'
-                + str(getattr(existing_model, field_name)) + '".')
+                + str(getattr(existing_model, field_name)) + '". ')
             warning += (
                 'Discarded "' + field_name + '" value: "'
                 + str(getattr(new_model, field_name)) + '".')
