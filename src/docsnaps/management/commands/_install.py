@@ -65,9 +65,6 @@ class Command(BaseCommand):
             django.core.management.base.CommandError If loading fails.
 
         """
-        # Include outer transaction here. ModelLoader starts a transaction as
-        # well. Include database exception handling here as well or in the
-        # handle() method.
         self.stdout.write('Attempting to load module data: ', ending='')
         try:
             with django.db.transaction.atomic():
@@ -342,8 +339,7 @@ class ModelLoader:
         the passed model.
 
         This method does NOT catch exceptions. Exceptions bubble to next stack
-        frame, first passing through the atomic context and rolling back the
-        transaction.
+        frame. Transaction start and handling is left to external calling code.
 
         New models are created for the insert operation so that, if a record
         already exists, the inbound and existing data can be compared.
@@ -352,73 +348,71 @@ class ModelLoader:
             https://docs.djangoproject.com/en/dev/ref/models/querysets/#get-or-create
 
         """
-        with django.db.transaction.atomic():
+        # Company
+        new_company = self._model.document_id.service_id.company_id
+        company, created = models.Company.objects.get_or_create(
+            name=new_company.name,
+            defaults={'website': new_company.website})
+        if new_company.website != company.website:
+            self.warnings.append(
+                self._generate_warning(company, new_company, ['website']))
 
-            # Company
-            new_company = self._model.document_id.service_id.company_id
-            company, created = models.Company.objects.get_or_create(
-                name=new_company.name,
-                defaults={'website': new_company.website})
-            if new_company.website != company.website:
-                self.warnings.append(
-                    self._generate_warning(company, new_company, ['website']))
+        # Service
+        new_service = self._model.document_id.service_id
+        service, created = models.Service.objects.get_or_create(
+            name=new_service.name,
+            company_id=company,
+            defaults={'website': new_service.website})
+        if new_service.website != service.website:
+            self.warnings.append(
+                self._generate_warning(service, new_service, ['website']))
 
-            # Service
-            new_service = self._model.document_id.service_id
-            service, created = models.Service.objects.get_or_create(
-                name=new_service.name,
-                company_id=company,
-                defaults={'website': new_service.website})
-            if new_service.website != service.website:
-                self.warnings.append(
-                    self._generate_warning(service, new_service, ['website']))
+        # Document
+        new_document = self._model.document_id
+        document, created = models.Document.objects.get_or_create(
+            name=new_document.name,
+            service_id=service)
 
-            # Document
-            new_document = self._model.document_id
-            document, created = models.Document.objects.get_or_create(
-                name=new_document.name,
-                service_id=service)
+        # Language
+        new_language = self._model.language_id
+        language, created = models.Language.objects.get_or_create(
+            code_iso_639_1=new_language.code_iso_639_1,
+            defaults={'name': new_language.name})
+        if new_language.name != language.name:
+            self.warnings.append(
+                self._generate_warning(language, new_language, ['name']))
 
-            # Language
-            new_language = self._model.language_id
-            language, created = models.Language.objects.get_or_create(
-                code_iso_639_1=new_language.code_iso_639_1,
-                defaults={'name': new_language.name})
-            if new_language.name != language.name:
-                self.warnings.append(
-                    self._generate_warning(language, new_language, ['name']))
+        # DocumentsLanguages
+        new_docs_langs = self._model
+        docs_langs, created = models.DocumentsLanguages.objects.get_or_create(
+            document_id=document,
+            language_id=language,
+            defaults={
+                'url': new_docs_langs.url,
+                'is_enabled': new_docs_langs.is_enabled})
+        differing_fields = []
+        if new_docs_langs.url != docs_langs.url:
+            differing_fields.append('url')
+        elif new_docs_langs.is_enabled != docs_langs.is_enabled:
+            differing_fields.append('is_enabled')
+        if differing_fields:
+            self.warnings.append(
+                self._generate_warning(
+                    docs_langs,
+                    new_docs_langs,
+                    differing_fields))
 
-            # DocumentsLanguages
-            new_docs_langs = self._model
-            docs_langs, created = models.DocumentsLanguages.objects.get_or_create(
-                document_id=document,
-                language_id=language,
-                defaults={
-                    'url': new_docs_langs.url,
-                    'is_enabled': new_docs_langs.is_enabled})
-            differing_fields = []
-            if new_docs_langs.url != docs_langs.url:
-                differing_fields.append('url')
-            elif new_docs_langs.is_enabled != docs_langs.is_enabled:
-                differing_fields.append('is_enabled')
-            if differing_fields:
-                self.warnings.append(
-                    self._generate_warning(
-                        docs_langs,
-                        new_docs_langs,
-                        differing_fields))
+        # Transform
+        transform, created = models.Transform.objects.get_or_create(
+            document_id=document,
+            module=self._module_name)
+        if not created:
+            self.warnings.append(
+                transform.__class__.__name__ + ': '
+                'Module ' + self._module_name + ' already registered '
+                'transform for ' + str(document) + '.')
 
-            # Transform
-            transform, created = models.Transform.objects.get_or_create(
-                document_id=document,
-                module=self._module_name)
-            if not created:
-                self.warnings.append(
-                    transform.__class__.__name__ + ': '
-                    'Module ' + self._module_name + ' already registered '
-                    'transform for ' + str(document) + '.')
-
-            self.load_successful = True
+        self.load_successful = True
 
 
 
