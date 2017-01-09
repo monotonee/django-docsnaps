@@ -67,13 +67,12 @@ def get_test_models(omit=None):
             if omit != model_name else None
 
         model_name = models.DocumentsLanguages.__name__
-        model_dict[model_name] = (
-            models.DocumentsLanguages(
-                documents_languages_id=1,
-                document_id=model_dict[models.Document.__name__],
-                language_id=model_dict[models.Language.__name__],
-                url='help.test.tset/legal/termsofuse?locale=en'),) \
-            if omit != model_name else ()
+        model_dict[model_name] = models.DocumentsLanguages(
+            documents_languages_id=1,
+            document_id=model_dict[models.Document.__name__],
+            language_id=model_dict[models.Language.__name__],
+            url='help.test.tset/legal/termsofuse?locale=en') \
+            if omit != model_name else None
 
         # If "omit" argument was passed and yet no models were omitted from the
         # hierarchy, then value of "omit" must not correspond to a model name.
@@ -82,4 +81,9 @@ def get_test_models(omit=None):
                 'Cannot omit model "' + omit + '". '
                 'No such model is returned by this function.')
 
-        return model_dict[model_name]
+        # Define return iterable.
+        return_iterable = ()
+        if model_dict[model_name]:
+            return_iterable = (model_dict[model_name],)
+
+        return return_iterable
