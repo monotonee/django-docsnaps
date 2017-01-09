@@ -29,25 +29,6 @@ import docsnaps.management.commands._utils as command_utils
 import docsnaps.models as models
 
 
-class TransactionTestMock(mock.NonCallableMock):
-    """
-    A class to allow side effects in mock attribute access.
-
-    Designed for a specific test of the transaction rollbacks as a result of
-    raised exceptions.
-
-    I may have missed it in the documentation or not yet discovered the
-    canonical way to do it, but it appears that side effects cannot be related
-    to unittest.mock attrbute access operations. I don't want to mess with
-    magic methods so this local class will do for now.
-
-    """
-
-    @property
-    def url(self):
-        raise django.db.Error
-
-
 class TestModelLoader(TransactionTestCase):
 
     def setUp(self):
@@ -167,5 +148,22 @@ class TestModelLoader(TransactionTestCase):
         raise NotImplementedError('Finish this test.')
 
 
+class TransactionTestMock(mock.NonCallableMock):
+    """
+    A class to allow side effects in mock attribute access.
+
+    Designed for a specific test of the transaction rollbacks as a result of
+    raised exceptions.
+
+    I may have missed it in the documentation or not yet discovered the
+    canonical way to do it, but it appears that side effects cannot be related
+    to unittest.mock attrbute access operations. I don't want to mess with
+    magic methods so this local class will do for now.
+
+    """
+
+    @property
+    def url(self):
+        raise django.db.Error
 
 
