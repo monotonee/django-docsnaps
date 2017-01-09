@@ -14,9 +14,9 @@ from collections import deque
 from importlib import import_module
 from types import ModuleType
 
-from django.core.exceptions import MultipleObjectsReturned
+import django.core.exceptions
+import django.db
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
 from django.db.models.fields.related import ForeignKey
 
 from docsnaps import models
@@ -51,8 +51,39 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS('success'))
             return module
 
-    def _load_models(self, module):
-        self.stdout.write('Loading module data: ', ending='')
+    def _load_models(self, module, disabled=False):
+        """
+        Load the module's data.
+
+        All of the module's data is loaded in a transaction.
+
+        Args:
+            module: The imported plugin module as returned by importlib.
+            disabled (bool): The value of the subcommand's "disabled" flag.
+
+        Raises:
+            django.core.management.base.CommandError If loading fails.
+
+        """
+        # Include outer transaction here. ModelLoader starts a transaction as
+        # well. Include database exception handling here as well or in the
+        # handle() method.
+        self.stdout.write('Attempting to load module data: ', ending='')
+        try:
+            with django.db.transaction.atomic():
+                for model in module.get_models():
+                    model_loader = ModelLoader(model, module.__name__)
+        except django.core.exceptions.MultipleObjectsReturned as exception:
+            self._raise_command_error(
+                'Multiple identical records returned for this module\'s data.'
+                'This indicates a data integrity violations in the database.')
+        except django.db.Error as exception:
+            self._raise_command_error(
+                'A database error occurred: ' + str(exception))
+        else:
+            for warning in model_loader.warnings:
+                self.stdout.write(self.style.WARNING('warning: ') + warning)
+            self.stdout.write(self.style.SUCCESS('success'))
 
     def _raise_command_error(self, message):
         """
@@ -200,17 +231,11 @@ class Command(BaseCommand):
         module = self._import_module(options['module'])
         self._validate_module_interface(module)
         self._validate_module_models(module)
-        self._load_models(module)
+        self._load_models(module, options['disabled'])
 
 
         # import pdb
         # pdb.set_trace()
-
-        # Attempt to request all necessary models/data from the module.
-        # If not complete data set, raise exception.
-        # Check for transformer. Output found or not found.
-
-        # language check, company, service, document, documentslanguages
 
         # Attempt to load al data within a single transaction.
             # Remember that the get_or_create() method returns tuples.
@@ -327,7 +352,7 @@ class ModelLoader:
             https://docs.djangoproject.com/en/dev/ref/models/querysets/#get-or-create
 
         """
-        with transaction.atomic():
+        with django.db.transaction.atomic():
 
             # Company
             new_company = self._model.document_id.service_id.company_id
