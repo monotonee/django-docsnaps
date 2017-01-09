@@ -69,7 +69,10 @@ class Command(BaseCommand):
         try:
             with django.db.transaction.atomic():
                 for model in module.get_models():
-                    model_loader = ModelLoader(model, module.__name__)
+                    model_loader = ModelLoader(
+                        model,
+                        module.__name__,
+                        disabled=disabled)
         except django.core.exceptions.MultipleObjectsReturned as exception:
             self._raise_command_error(
                 'Multiple identical records returned for this module\'s data.'
@@ -264,7 +267,7 @@ class ModelLoader:
 
     """
 
-    def __init__(self, model, module_name: str):
+    def __init__(self, model, module_name: str, disabled=False):
         """
         Initialize an instance.
 
@@ -273,9 +276,11 @@ class ModelLoader:
                 module from which the model was returned. The module name is
                 used to populate database records.
             model (docsnaps.models.DocumentsLanguages)
+            disabled (boolean): If set to True, disables the new job on insert.
+                If false, value
 
         """
-
+        self._disabled = disabled
         self._model = model
         self._module_name = module_name
         self.load_successful = False
@@ -389,7 +394,7 @@ class ModelLoader:
             language_id=language,
             defaults={
                 'url': new_docs_langs.url,
-                'is_enabled': new_docs_langs.is_enabled})
+                'is_enabled': self._disabled})
         differing_fields = []
         if new_docs_langs.url != docs_langs.url:
             differing_fields.append('url')
