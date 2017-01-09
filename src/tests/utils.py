@@ -14,8 +14,11 @@ def get_test_models(omit=None):
         resources. This is simply to test valid module structure and values.
 
         Note the explicit primary key values. This is done to facilitate
-        comparison of QuerySet results by allowing the construction of QuerySet
-        filters using these test models.
+        comparison of QuerySet results. Without these explicit primary key
+        values, attempt to compare these model instances with query result sets
+        fails. To overcome this comparison failure would increase complexity of
+        test assertions to an untenable level given the composite keys and
+        foreign key constraints.
 
         Args:
             omit (string): The name of a model to omit from graph. The value

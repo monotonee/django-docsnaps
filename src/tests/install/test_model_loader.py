@@ -9,6 +9,10 @@ If TransactionTestCase is evidenced to be too slow, a different solution will
 have to be explored. Manual ALTER TABLE statements could be used to reset
 AUTO_INCREMENT values, for instance.
 
+Because this test case class reset the database to a known state before
+each test, the all() QuerySet method is used. There is no need to filter
+results because there will be no other records in the database.
+
 """
 
 import io
@@ -18,7 +22,7 @@ import unittest.mock as mock
 from django.test import TransactionTestCase
 
 from .. import utils as test_utils
-from docsnaps.management.commands._install import ModelLoader
+from docsnaps.management.commands._install import Command, ModelLoader
 import docsnaps.management.commands._utils as command_utils
 import docsnaps.models as models
 
@@ -26,10 +30,11 @@ import docsnaps.models as models
 class TestModelLoader(TransactionTestCase):
 
     def setUp(self):
+        self._command = Command(stdout=io.StringIO(), stderr=io.StringIO())
         self._models = test_utils.get_test_models()
         self._docs_langs = self._models[0]
         self._module = mock.NonCallableMock(
-            spec=['__name__', 'get_models', 'transform'])
+            spec_set=['__class__', '__name__', 'get_models', 'transform'])
         attributes = {
             '__class__': ModuleType,
             '__name__': 'mock.module',
@@ -41,73 +46,67 @@ class TestModelLoader(TransactionTestCase):
         Test a successful and uneventful load.
 
         """
-        document = self._docs_langs.document_id
-        language = self._docs_langs.language_id
+        self._command._load_models(self._module)
+        result = models.DocumentsLanguages.objects.select_related().all()
 
-        model_loader = ModelLoader(self._docs_langs, self._module.__name__)
-        result = models.DocumentsLanguages.objects.select_related().filter(
-            document_id=document,
-            language_id=language)
-
-        # Manager.get() raises an exception if multiple or no records returned.
-        # I'm counting it as an assertion.
-        transform = models.Transform.objects.get(
-            document_id=document,
-            module=self._module.__name__)
+        # Verify that all foreign key relationships exist and are correct.
         self.assertEqual(len(result), 1)
         self.assertEqual(
             list(command_utils.flatten_model_graph(result.first())),
             list(command_utils.flatten_model_graph(self._docs_langs)))
-        self.assertFalse(model_loader.warnings)
+
+        # Verify that the Transform record was created correctly.
+        transform = models.Transform.objects.all()
+        self.assertEqual(len(transform), 1)
+        self.assertEqual(
+            transform.first().document_id.document_id,
+            self._docs_langs.document_id.document_id)
+        self.assertEqual(transform.first().module, self._module.__name__)
 
     def test_idempotent_load(self):
         """
         Test that the data loading is idempotent with same data set.
 
-        Remember that Manager.get() raises an exception if multiple or no
-        records returned. Manager.get() is used to fetch Transform records.
-        Their function is essentially that of assertions.
-
-        Because both instances of loading insert the same data, only the warning
-        about the duplicate Transform is expected.
+        When data with identical unique or primary keys are inserted, the values
+        of the non-indexed fields of the existing data will NOT be overwritten.
 
         """
-        document = self._docs_langs.document_id
-        language = self._docs_langs.language_id
+        # Configure the mock module to return two models instead of one.
+        duplicate_docslangs = models.DocumentsLanguages(
+            document_id=self._docs_langs.document_id,
+            language_id=self._docs_langs.language_id,
+            url='should.be.discarded')
+        self._module.get_models.return_value = (
+            self._docs_langs, duplicate_docslangs)
 
-        model_loader_1 = ModelLoader(self._docs_langs, self._module.__name__)
-        result_1 = models.DocumentsLanguages.objects.select_related().filter(
-            document_id=document,
-            language_id=language)
-        result_1_len = len(result_1)
-        transform_1 = models.Transform.objects.get(
-            document_id=document,
-            module=self._module.__name__)
+        self._command._load_models(self._module)
+        result_set = models.DocumentsLanguages.objects.select_related().all()
 
-        model_loader_2 = ModelLoader(self._docs_langs, self._module.__name__)
-        result_2 = models.DocumentsLanguages.objects.select_related().filter(
-            document_id=document,
-            language_id=language)
-        result_2_len = len(result_2)
-        transform_2 = models.Transform.objects.get(
-            document_id=document,
-            module=self._module.__name__)
-
-        # Primarily testing second result set. Testing a single result set is
-        # done in previous test. We're only interested in the results of
-        # repeated write here.
-        self.assertEqual(result_2_len, 1)
-        self.assertTrue(model_loader_2.warnings)
-        self.assertTrue(
-            warning for warning in model_loader_2.warnings
-            if transform_2.__class__.__name__ in warning)
-        self.assertEqual(
-            list(command_utils.flatten_model_graph(result_2.first())),
+        # Verify that the existing data was NOT overwritten.
+        self.assertEqual(len(result_set), 1)
+        self.assertEqual(result_set.first().url, self._docs_langs.url)
+        self.assertListEqual(
+            list(command_utils.flatten_model_graph(result_set.first())),
             list(command_utils.flatten_model_graph(self._docs_langs)))
+
+        # Verify that transform record was inserted.
+        transform_set = models.Transform.objects.select_related().all()
+        self.assertEqual(len(transform_set), 1)
+        self.assertEqual(
+            transform_set.first().document_id, self._docs_langs.document_id)
+        self.assertEqual(transform_set.first().module, self._module.__name__)
 
     def test_transaction_rollback(self):
         """
         Test that the entire load is rolled back on any exception.
+
+        Test this with multiple DocumentsLanguages instances returned from the
+        module, with the last one raising an exception. All successfully-
+        inserted data should also be rolled back.
+
+        Consider switching tests to _load method instead of class.
+
+        Check that command throws CommandError.
 
         """
         raise NotImplementedError('Finish this test.')
@@ -115,6 +114,19 @@ class TestModelLoader(TransactionTestCase):
     def test_existing_record_warnings(self):
         """
         Test that warnings are emitted each time record already exists in DB.
+
+        Warnings are also tested in other test cases but if this fails, at least
+        one knows exactly where to begin looking for other test failures.
+
+        """
+        raise NotImplementedError('Finish this test.')
+
+    def test_disabled_flag(self):
+        """
+        Test that docsnaps task is inserted as disabled when flag is passed.
+
+        The disabeld flag value is parsed from command line arguments to the
+        Django command.
 
         """
         raise NotImplementedError('Finish this test.')

@@ -2,3 +2,7 @@ Add function argument annotations
 Add default data to migrations using Django's RunPython or RunSQL
 Run style checkers (pep8 and/or autopep8)
 Review use of primary keys in tests that use models
+Implement a way to handle plugin module updates.
+    Uninstall and reinstall?
+    Separate "update" command?
+    "override" flag to install command?

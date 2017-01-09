@@ -331,6 +331,12 @@ class ModelLoader:
         the record is left unchanged and is not updated. This makes the load
         operation repeatable with no side effects. A warning is issued if the
         existing record's non-key attributes differ from the incoming record.
+        This behavior is designed to guard against multiple modules that may use
+        the same data such as two separate Netflix modules.
+
+        That behavior does, however, make module updates a problem. A flag to
+        the install command could be passed to force override or a separate
+        "update" command could be created.
 
         I opted to write this explicitly. The method becomes longer, less
         elegant, and possibly more time-consuming to maintain with model changes
