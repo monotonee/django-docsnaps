@@ -241,17 +241,6 @@ class Command(BaseCommand):
         self._load_models(module, options['disabled'])
 
 
-        # import pdb
-        # pdb.set_trace()
-
-        # Attempt to load al data within a single transaction.
-            # Remember that the get_or_create() method returns tuples.
-            # https://docs.djangoproject.com/en/dev/ref/models/querysets/#get-or-create
-            # Register module and its transformer.
-            # Make sure to respect --disabled choice.
-            # If storage error, roll back transaction and raise exception.
-
-
 class ModelLoader:
     """
     A helper class that handles loading of models provided by a plugin module.
