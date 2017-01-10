@@ -401,13 +401,14 @@ class ModelLoader:
                 self._generate_warning(language, new_language, ['name']))
 
         # DocumentsLanguages
+        is_enabled = self._disabled == False
         new_docs_langs = self._model
         docs_langs, created = models.DocumentsLanguages.objects.get_or_create(
             document_id=document,
             language_id=language,
             defaults={
                 'url': new_docs_langs.url,
-                'is_enabled': self._disabled})
+                'is_enabled': is_enabled})
         differing_fields = []
         if new_docs_langs.url != docs_langs.url:
             differing_fields.append('url')

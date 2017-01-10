@@ -54,13 +54,14 @@ class TestModelLoader(TransactionTestCase):
 
         """
         self._command._load_models(self._module)
-        result = models.DocumentsLanguages.objects.select_related().all()
+        result_set = models.DocumentsLanguages.objects.select_related().all()
 
         # Verify that all foreign key relationships exist and are correct.
-        self.assertEqual(len(result), 1)
+        self.assertEqual(len(result_set), 1)
         self.assertEqual(
-            list(command_utils.flatten_model_graph(result.first())),
+            list(command_utils.flatten_model_graph(result_set.first())),
             list(command_utils.flatten_model_graph(self._docs_langs)))
+        self.assertTrue(result_set.first().is_enabled)
 
         # Verify that the Transform record was created correctly.
         transform = models.Transform.objects.all()
@@ -95,6 +96,7 @@ class TestModelLoader(TransactionTestCase):
         self.assertListEqual(
             list(command_utils.flatten_model_graph(result_set.first())),
             list(command_utils.flatten_model_graph(self._docs_langs)))
+        self.assertTrue(result_set.first().is_enabled)
 
         # Verify that transform record was inserted.
         transform_set = models.Transform.objects.select_related().all()
@@ -114,7 +116,7 @@ class TestModelLoader(TransactionTestCase):
         """
         # Configure the mock module to return two models instead of one.
         # The first model will be successful, the second will raise exception.
-        duplicate_docslangs = TransactionTestMock(
+        duplicate_docslangs = ExceptionAttributeMock(
             spec_set=models.DocumentsLanguages)
         attributes = {
             'document_id': self._docs_langs.document_id,
@@ -160,10 +162,13 @@ class TestModelLoader(TransactionTestCase):
         Django command.
 
         """
-        raise NotImplementedError('Finish this test.')
+        self._command._load_models(self._module, disabled=True)
+        result_set = models.DocumentsLanguages.objects.select_related().all()
+        self.assertEqual(len(result_set), 1)
+        self.assertFalse(result_set.first().is_enabled)
 
 
-class TransactionTestMock(mock.NonCallableMock):
+class ExceptionAttributeMock(mock.NonCallableMock):
     """
     A class to allow side effects in mock attribute access.
 
