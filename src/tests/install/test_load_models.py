@@ -20,7 +20,7 @@ from types import ModuleType
 import unittest.mock as mock
 
 import django.db
-import django.core.management.base
+from django.core.management.base import CommandError
 from django.test import TransactionTestCase
 
 from .. import utils as test_utils
@@ -127,7 +127,7 @@ class TestModelLoader(TransactionTestCase):
             self._docs_langs, duplicate_docslangs)
 
         # Verify that the proper exception is re-raised.
-        with self.assertRaises(django.core.management.base.CommandError):
+        with self.assertRaises(CommandError):
             self._command._load_models(self._module)
 
         # Verify that the transaction was rolled back.
