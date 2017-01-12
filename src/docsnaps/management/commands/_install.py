@@ -20,7 +20,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db.models.fields.related import ForeignKey
 
 from docsnaps import models
-from docsnaps.management.commands._utils import flatten_model_graph
+import docsnaps.management.commands._utils as command_utils
 
 
 class Command(BaseCommand):
@@ -46,7 +46,7 @@ class Command(BaseCommand):
         try:
             module = import_module(module_name)
         except ImportError as import_error:
-            self._raise_command_error(import_error)
+            command_utils.raise_command_error(self.stdout, import_error)
         else:
             self.stdout.write(self.style.SUCCESS('success'))
             return module
@@ -86,32 +86,13 @@ class Command(BaseCommand):
                 'A database error occurred: ' + str(exception))
 
         if command_error_message:
-                self._raise_command_error(command_error_message)
+            command_utils.raise_command_error(
+                self.stdout,
+                command_error_message)
 
         self.stdout.write(self.style.SUCCESS('success'))
         for warning in model_loader.warnings:
             self.stdout.write(self.style.WARNING('warning: ') + warning)
-
-    def _raise_command_error(self, message):
-        """
-        Raise a CommandError and writes a failure string to stdout.
-
-        Within this command class, the pattern of raising the CommandError and
-        finishing a stdout string with a failure message is repeated
-        consistently. Thus, this method.
-
-        Args:
-            message (string or Exception): The message to pass to the exception
-                constructor. Whatever is passed to an Exception constructor
-                seems to be implicitly converted to a string. All Exception
-                subclasses appear to output their message when converted.
-
-        Raises:
-            django.core.management.base.CommandError
-
-        """
-        self.stdout.write(self.style.ERROR('failed'))
-        raise CommandError(message)
 
     def _validate_module_interface(self, module):
         """
@@ -143,7 +124,7 @@ class Command(BaseCommand):
                     callable_name + ' is not callable in ' +
                     module.__name__ + '.')
             if error_message:
-                self._raise_command_error(error_message)
+                command_utils.raise_command_error(self.stdout, error_message)
 
         self.stdout.write(self.style.SUCCESS('success'))
 
@@ -177,14 +158,15 @@ class Command(BaseCommand):
 
         # Ensure returned models value is not empty.
         if not module_models:
-            self._raise_command_error(
+            command_utils.raise_command_error(
+                self.stdout,
                 module.__name__ + '.get_models() returned an empty iterable.')
 
         # Ensure returned models value is an iterable.
         try:
             iter(module_models)
         except TypeError as type_error:
-            self._raise_command_error(type_error)
+            command_utils.raise_command_error(self.stdout, type_error)
 
         # Ensure returned models value is an iterable of correct types and
         # minimum necessary model relationship trees are provided.
@@ -197,16 +179,19 @@ class Command(BaseCommand):
         for model in module_models:
             if isinstance(model, models.DocumentsLanguages):
                 returned_classes = set(
-                    [m.__class__ for m in flatten_model_graph(model)])
+                    [m.__class__ for m in command_utils.flatten_model_graph(
+                        model)])
                 diff = required_classes.difference(returned_classes)
                 if diff:
-                    self._raise_command_error(
+                    command_utils.raise_command_error(
+                        self.stdout,
                         module.__name__ + '.get_models() returned instance ' +
                         str(model) + ', the model relationships under which '
                         'are missing at least one instance of the following '
                         'models: ' + ', '.join(map(str, diff)))
             else:
-                self._raise_command_error(
+                command_utils.raise_command_error(
+                    self.stdout,
                     module.__name__ + '.get_models() '
                     'returned incorrect type "' + str(type(model)) + '" '
                     'in iterable.')

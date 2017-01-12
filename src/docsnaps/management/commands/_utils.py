@@ -5,9 +5,11 @@ A module that provides a few utility functions and/or classes.
 
 from collections import deque
 
+from django.core.management.base import CommandError
+from django.core.management.color import color_style
 from django.db.models.fields.related import ForeignKey
 
-from ...models import DocumentsLanguages
+from docsnaps.models import DocumentsLanguages
 
 
 def flatten_model_graph(model):
@@ -55,3 +57,33 @@ def flatten_model_graph(model):
                 and hasattr(current_model, field.name)):
                 model_queue.append(getattr(current_model, field.name))
         yield current_model
+
+def raise_command_error(stdout, message):
+    """
+    Raise a CommandError and writes a failure string to stdout.
+
+    This function is designed specifically to be used inside a Command
+    class. In this module, the custom Command classes often begin status
+    messages in stdout without ending them with a newline. Success or
+    failure messages are later appended to the stdout line along with with the
+    newline. This function closes one of these open-ended stdout lines with a
+    failure.
+
+    In addition, it raises the CommandError that Django's management command
+    framework expects and will handle.
+
+    Args:
+        stdout: An IO stream. Ised to output
+        message (string or Exception): The message to pass to the exception
+            constructor. Whatever is passed to an Exception constructor
+            seems to be implicitly converted to a string. All Exception
+            subclasses appear to output their message when converted.
+
+    Raises:
+        django.core.management.base.CommandError
+
+    """
+    style = color_style()
+    stdout.write(style.ERROR('failed'))
+    raise CommandError(message)
+
