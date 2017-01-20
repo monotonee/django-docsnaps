@@ -82,13 +82,16 @@ class Command(BaseCommand):
         """
         snapshots = self._get_snapshots()
 
+        loop = asyncio.get_event_loop()
         with aiohttp.ClientSession() as session:
-            coroutines = []
+            tasks = []
             for job in active_jobs:
                 snapshot = snapshots.get(job.documents_languages_id, None)
-                coroutines.append(self._execute_job(job, session, snapshot))
+                task = loop.create_task(
+                    self._execute_job(job, session, snapshot))
+                tasks.append(task)
 
-            done, pending = await asyncio.wait(coroutines)
+            done, pending = await asyncio.wait(tasks)
 
     async def _execute_job(self, job, connection_session, snapshot_text=None):
         """
@@ -105,6 +108,23 @@ class Command(BaseCommand):
         self.stdout.write('Pre-sleep')
         await asyncio.sleep(1)
         self.stdout.write('Post-sleep')
+        raise Exception('test')
+
+    async def request_document(self, url, connection_session):
+        """
+        Request the document from the remote source.
+
+        Args:
+            url (string): The URL to which a GET request will be issued.
+            connection_session: An HTTP request session. In aiohttp, for
+                example, this is a ClientSession object, an abstraction of a
+                connection pool.
+
+        Returns:
+            string: A string of the fetched document.
+
+        """
+        pass
 
     def _get_snapshots(self):
         """
