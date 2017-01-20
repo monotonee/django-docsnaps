@@ -278,7 +278,7 @@ class DocumentsLanguages(models.Model):
         verbose_name='language')
     url = models.URLField(
         blank=False, default=None, max_length=255, null=False)
-    is_enabled = models.BooleanField(default=False)
+    is_enabled = models.BooleanField(default=True)
     updated_timestamp = MariadbTimestampField(auto_now=True)
 
     class Meta:
@@ -312,6 +312,7 @@ class Snapshot(models.Model):
         db_table = 'snapshot'
         get_latest_by = 'datetime'
         index_together = ['date', 'time']
+        unique_together = ['documents_languages_id', 'datetime']
 
 
 class Transform(models.Model):
