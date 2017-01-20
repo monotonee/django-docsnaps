@@ -16,7 +16,7 @@ from importlib import import_module
 
 from django.core.management.base import BaseCommand, CommandError
 
-from . import _install
+from docsnaps.management.commands import _install
 # from . import _run as run_parser
 
 
