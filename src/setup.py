@@ -17,9 +17,9 @@ setup(
     author_email='monotonee@tuta.io',
     include_package_data=True,
     install_requires=[
+        'aiohttp',
         'django',
-        'mysqlclient',
-        'requests',
+        'mysqlclient'
     ],
     license='MIT',
     packages=find_packages(),

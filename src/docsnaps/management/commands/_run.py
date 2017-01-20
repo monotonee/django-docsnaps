@@ -1,165 +1,195 @@
 """
 A Django admin command that will run all enabled snapshot jobs.
 
+TODO: Consider adding a CLI argument to run one or more specific jobs.
+TODO: Create CLI status indicators for each async task. Will require multi-line
+    terminal space allocation and tracking of task-to-line association since
+    async execution will scramble output order.
+TODO: Remove database exception handling? handlers don't do anything but throw
+    a CommandError. DB exceptions should have same effect if left to bubble.
+
 """
 
+import asyncio
+#from importlib import import_module
+
+import aiohttp
 from django.core.management.base import BaseCommand, CommandError
+import django.db
 from django.db.models import prefetch_related_objects
-from importlib import import_module
 
-import requests
-
-from ...models import DocumentsLanguages
+import docsnaps.models
+import docsnaps.management.commands._utils as command_utils
 
 
-HELP = 'Executes active snapshot jobs and saves snapshots of changed docs.'
+class Command(BaseCommand):
 
-def _compare_snapshot(instance, text):
-    """
-    Determine if new text has changed since last snapshot.
+    help = 'Executes active snapshot jobs and saves snapshots of changed docs.'
 
-    Args:
-        instance (models.DocumentsLanguages): Model of a doc instance.
-            Necessary to fetch most reent snapshot of doc instance.
-        text (string): The text of the document after transformation.
+    def _get_active_jobs(self):
+        """
+        Query the database for active snapshot jobs.
 
-    Returns:
-        Boolean True if changed, False, otherwise.
+        Each DocumentsLanguages record corresponds to a snpashot "job." Each job
+        may have zero or more Snapshot records.
 
-    """
-    pass
+        Returns:
+            An iterable. When not empty, elements are DocumentsLanguages model
+            instances.
 
+        See:
+            https://docs.djangoproject.com/en/dev/topics/db/sql/#adding-annotations
 
-def _save_document(instance, text):
-    """
-    Save the document text to the database.
+        """
+        self.stdout.write('Loading enabled snapshot jobs: ', ending='')
 
-    Writes status details to self.stdout.
-
-    Args:
-        instance (models.DocumentsLanguages): Model of a doc instance.
-        text (string): The raw text of the document as received from the
-            source.
-
-    """
-    pass
-
-def _transform_document(instance, text):
-    """
-    Check for transformers for document and apply them if available.
-
-    Writes status details to self.stdout.
-
-    Args:
-        instance (models.DocumentsLanguages): Model of a doc instance.
-            Necessary to determine name of transformer class.
-        text (string): The raw text of the document as received from the
-            source.
-
-    Returns:
-        Text of document after transformations have been applied, if any
-            were available.
-
-    """
-    return_text = text
-
-    self.stdout.write('  ' + 'Searching for transformation: ', ending='')
-    module_name = instance.service_name.lower().replace(' ', '_')
-    root_pkg = __name__.split('.')[0]
-    transformers_pkg = '.'.join([root_pkg, 'transformers'])
-
-    try:
-        module = import_module('.'.join([transformers_pkg, module_name]))
-    except ImportError:
-        pass
-    else:
-        # If language-specific transformer available, give it priority.
-        doc_name = instance.document_id.name.title().replace(' ', '')
-        lang_code = instance.language_id.code_iso_639_1.title()
-        transformer = None
-        if hasattr(module, doc_name + lang_code):
-            transformer_class = getattr(module, doc_name + lang_code)
-            transformer = transformer_class()
-        elif hasattr(module, doc_name):
-            transformer_class = getattr(module, doc_name)
-            transformer = transformer_class()
-
-        if transformer:
-            self.stdout.write(self.style.SUCCESS('found'))
-            self.stdout.write('  ' + 'Applying transformation: ', ending='')
-            return_text = transformer.transform(text)
-            self.stdout.write(self.style.SUCCESS('done'))
-        else:
-            self.stdout.write(self.style.warning('not found'))
-
-    return return_text
-
-def handle(*args, **options):
-    """
-    Checks the content of each document and saves those that have changed.
-
-    I'm tired of fighting with the ORM for everything but the most basic
-    queries. Despite the use of prefetch_related, Django will still issue a
-    separate SQL query for most methods that operate upon the set, defeating
-    the purpose of prefetching in this context. This essentialy limits me to
-    using .all() and performing sorts, slicing, and filters manually in
-    Python. This is not future-proof (large data sets) and it violates
-    logical duties of the code/database separation. Raw SQL is therefore
-    used.
-
-    Attempting to use django.db.models.prefetch_related_objects() results
-    in a separate query for each related object, which again defeats my
-    reasonable goal of minimizing database hits.
-
-    See:
-        https://docs.djangoproject.com/en/dev/topics/db/sql/#adding-annotations
-        https://docs.djangoproject.com/en/dev/ref/models/querysets/#prefetch-related
-        https://docs.djangoproject.com/en/1.10/ref/models/querysets/#prefetch-related-objects
-
-    """
-    # Note that newlines and spaces are preserved in this string. Machines
-    # don't care and code as read more than it is written.
-    raw_sql = '''
-        SELECT
-            documents_languages.*,
-            service.name as service_name,
-            document.name AS document_name,
-            language.name AS language_name,
-            language.code_iso_639_1 AS language_code_iso_639_1,
-            snapshot.text AS latest_snapshot_text
-        FROM
-            documents_languages
-            INNER JOIN document
-                ON document.document_id = documents_languages.document_id
-            INNER JOIN language
-                ON language.language_id = documents_languages.language_id
-            INNER JOIN service
-                ON service.service_id = document.service_id
-            LEFT JOIN snapshot
-                ON snapshot.documents_languages_id = documents_languages.documents_languages_id
-            LEFT JOIN snapshot AS snapshot2
-                ON snapshot2.documents_languages_id = documents_languages.documents_languages_id
-                AND snapshot2.datetime > snapshot.datetime
-        WHERE
-            documents_languages.is_enabled IS TRUE
-            AND snapshot2.snapshot_id IS NULL'''
-    doc_instances = DocumentsLanguages.objects.raw(raw_sql)
-
-    for instance in doc_instances:
-        self.stdout.write(self.style.MIGRATE_HEADING(' '.join([
-            instance.service_name,
-            instance.document_name,
-            'in',
-            instance.language_name])))
-
-        self.stdout.write('  Requesting document: ', ending='')
+        command_error_message = None
         try:
-            response = requests.get('https://' + instance.url)
-            response.raise_for_status()
-        except requests.exceptions.HTTPError:
-            self.stdout.write(self.style.ERROR(response.status_code))
-        except requests.exceptions.RequestException as exception:
-            self.stdout.write(self.style.ERROR(type(exception).__name__))
-        else:
-            self.stdout.write(self.style.SUCCESS(response.status_code))
-            text = self._transform_document(instance, response.text)
+            docsnaps_set = docsnaps.models.DocumentsLanguages.objects.filter(
+                is_enabled=True)
+        except django.db.Error as exception:
+            command_error_message = (
+                'A database error occurred: ' + str(exception))
+
+        if command_error_message:
+            command_utils.raise_command_error(
+                self.stdout,
+                command_error_message)
+
+        active_jobs = docsnaps.models.DocumentsLanguages.objects.filter(
+            is_enabled=True)
+
+        self.stdout.write(self.style.SUCCESS('success'))
+        return active_jobs
+
+    async def _execute_jobs(self, active_jobs):
+        """
+        Execute each job in the passed iterable of snapshot jobs.
+
+        Defined in own function to reduce nested block levels in the handle()
+        method. This method handles the creation of event loop, coroutine
+        creation and scheduling, and the aiohttp session creation.
+
+        Defined as a coroutine to shut aiohttp up. aiohttp apparently issues
+        warnings directly to stdout when one tries to use a ClientSession
+        while loop is not running. I have yet to find documentation on the
+        technical reasons for this requirement.
+
+        Args:
+            active_jobs (iterable): An iterable of DocumentsLanguages model
+                instances representing records in which is_enabled is True.
+
+        """
+        snapshots = self._get_snapshots()
+
+        with aiohttp.ClientSession() as session:
+            coroutines = []
+            for job in active_jobs:
+                snapshot = snapshots.get(job.documents_languages_id, None)
+                coroutines.append(self._execute_job(job, session, snapshot))
+
+            done, pending = await asyncio.wait(coroutines)
+
+    async def _execute_job(self, job, connection_session, snapshot_text=None):
+        """
+        Execute a single snapshot job.
+
+        Args:
+            job (DocumentsLanguages): A DocumentsLanguages model instance.
+            snapshot_text (string): The text of the job's most recent snapshot.
+            connection_session: An HTTP request session. In aiohttp, for
+                example, this is a ClientSession object, an abstraction of a
+                connection pool.
+
+        """
+        self.stdout.write('Pre-sleep')
+        await asyncio.sleep(1)
+        self.stdout.write('Post-sleep')
+
+    def _get_snapshots(self):
+        """
+        Get the latest document snapshot for each active job.
+
+        This was defined in its own method for a number of reasons.
+
+        As the docsnaps system runs and accumulates potentially hundreds or even
+        thousands of document snapshots, it becomes unfeasable and detrimental
+        to attempt to load all snapshot records. Therefore, some method must be
+        found to limit the results to the latest snapshot. In-memory sorting is
+        impractical with high cardinality. The database layer is the appropriate
+        place to perform sorting and limiting but a more complex query is
+        required.
+
+        I use a self-join to find the latest Snapshot record for each
+        DocumentsLanguages record. I am tired of fighting with the ORM for
+        everything but the most basic queries. I am therefore using a raw SQL
+        string.
+
+        I refuse to use manager.raw() as select_related() is not supported and
+        the Snapshot models will issue a separate query for EVERY
+        DocumentsLanguages PK access.
+
+        The only other alternative is to use QuerySet.iterator() to look for and
+        save the latest Snapshot for each DocumentsLanguages record. However,
+        this still requires iterating over EVERY active snapshot record. ORM
+        layers are such double-edged swords and are meant for nothing more
+        complex than simple web sites.
+
+        Returns:
+            A dictionary of the latest Snapshot text for each Documentslanguages
+            record, keyed by the snapshot's documents_languages_id.
+
+        """
+        snapshot_sql = '''
+            SELECT
+                {Snapshot}.snapshot_id
+                ,{Snapshot}.documents_languages_id
+                ,{Snapshot}.text
+            FROM
+                {Snapshot}
+                LEFT JOIN {Snapshot} as snapshot_2
+                    ON snapshot_2.documents_languages_id = {Snapshot}.documents_languages_id
+                    AND snapshot_2.datetime > {Snapshot}.datetime
+                INNER JOIN {DocumentsLanguages}
+                    ON {DocumentsLanguages}.documents_languages_id = {Snapshot}.documents_languages_id
+                    AND {DocumentsLanguages}.is_enabled IS TRUE
+            WHERE
+                snapshot_2.snapshot_id IS NULL'''
+        snapshot_sql = snapshot_sql.format(
+            DocumentsLanguages=docsnaps.models.DocumentsLanguages._meta.db_table,
+            Snapshot=docsnaps.models.Snapshot._meta.db_table)
+
+        command_error_message = None
+        try:
+            with django.db.connection.cursor() as cursor:
+                cursor.execute(snapshot_sql)
+                result_set = cursor.fetchall()
+        except django.db.Error as exception:
+            command_error_message = (
+                'A database error occurred: ' + str(exception))
+
+        if command_error_message:
+            command_utils.raise_command_error(
+                self.stdout,
+                command_error_message)
+
+        snapshot_dict = {snapshot[1]: snapshot[2] for snapshot in result_set}
+        return snapshot_dict
+
+    def add_arguments(self, parser):
+        """
+        Add arguments to the argparse parser object.
+
+        Currently no need for arguments.
+
+        Add a dry-run flag?
+
+        """
+        pass
+
+    def handle(self, *args, **options):
+        active_jobs = self._get_active_jobs()
+        if (active_jobs):
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(self._execute_jobs(active_jobs))
+            loop.close()
