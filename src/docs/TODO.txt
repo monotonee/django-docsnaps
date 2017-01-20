@@ -6,3 +6,5 @@ Implement a way to handle plugin module updates.
     Uninstall and reinstall?
     Separate "update" command?
     "override" flag to install command?
+Replace use of QuerySet.first() with numeric index syntax
+    first() issues another DB query, an ORDER BY with LIMIT 1
