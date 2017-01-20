@@ -29,7 +29,26 @@ import docsnaps.management.commands._utils as command_utils
 import docsnaps.models as models
 
 
-class TestModelLoader(TransactionTestCase):
+class ExceptionAttributeMock(mock.NonCallableMock):
+    """
+    A class to allow side effects in mock attribute access.
+
+    Designed for a specific test of the transaction rollbacks as a result of
+    raised exceptions.
+
+    I may have missed it in the documentation or not yet discovered the
+    canonical way to do it, but it appears that side effects cannot be related
+    to unittest.mock attrbute access operations. I don't want to mess with
+    magic methods so this local class will do for now.
+
+    """
+
+    @property
+    def url(self):
+        raise django.db.Error
+
+
+class TestLoadModels(TransactionTestCase):
 
     def setUp(self):
         """
@@ -48,28 +67,38 @@ class TestModelLoader(TransactionTestCase):
             'get_models.return_value': self._models}
         self._module.configure_mock(**attributes)
 
-    def test_load_successful(self):
+    def test_disabled_flag(self):
         """
-        Test a successful and uneventful load.
+        Test that docsnaps task is inserted as disabled when flag is passed.
+
+        The disabeld flag value is parsed from command line arguments to the
+        Django command.
 
         """
-        self._command._load_models(self._module)
+        self._command._load_models(self._module, disabled=True)
         result_set = models.DocumentsLanguages.objects.select_related().all()
-
-        # Verify that all foreign key relationships exist and are correct.
         self.assertEqual(len(result_set), 1)
-        self.assertEqual(
-            list(command_utils.flatten_model_graph(result_set.first())),
-            list(command_utils.flatten_model_graph(self._docs_langs)))
-        self.assertTrue(result_set.first().is_enabled)
+        self.assertFalse(result_set.first().is_enabled)
 
-        # Verify that the Transform record was created correctly.
-        transform = models.Transform.objects.all()
-        self.assertEqual(len(transform), 1)
-        self.assertEqual(
-            transform.first().document_id.document_id,
-            self._docs_langs.document_id.document_id)
-        self.assertEqual(transform.first().module, self._module.__name__)
+    def test_existing_record_warnings(self):
+        """
+        Test that warnings are emitted each time record already exists in DB.
+
+        Warnings are also tested in other test cases but if this fails, at least
+        one knows exactly where to begin looking for other test failures.
+
+        """
+        # Configure the mock module to return two models instead of one.
+        duplicate_docslangs = models.DocumentsLanguages(
+            document_id=self._docs_langs.document_id,
+            language_id=self._docs_langs.language_id,
+            url='should.be.discarded')
+        self._module.get_models.return_value = (
+            self._docs_langs, duplicate_docslangs)
+
+        self._command._load_models(self._module)
+
+        self.assertEqual(self._command.stdout.getvalue().count('warning:'), 2)
 
     def test_idempotent_load(self):
         """
@@ -105,6 +134,29 @@ class TestModelLoader(TransactionTestCase):
             transform_set.first().document_id, self._docs_langs.document_id)
         self.assertEqual(transform_set.first().module, self._module.__name__)
 
+    def test_load_successful(self):
+        """
+        Test a successful and uneventful load.
+
+        """
+        self._command._load_models(self._module)
+        result_set = models.DocumentsLanguages.objects.select_related().all()
+
+        # Verify that all foreign key relationships exist and are correct.
+        self.assertEqual(len(result_set), 1)
+        self.assertEqual(
+            list(command_utils.flatten_model_graph(result_set.first())),
+            list(command_utils.flatten_model_graph(self._docs_langs)))
+        self.assertTrue(result_set.first().is_enabled)
+
+        # Verify that the Transform record was created correctly.
+        transform = models.Transform.objects.all()
+        self.assertEqual(len(transform), 1)
+        self.assertEqual(
+            transform.first().document_id.document_id,
+            self._docs_langs.document_id.document_id)
+        self.assertEqual(transform.first().module, self._module.__name__)
+
     def test_transaction_rollback(self):
         """
         Test that the entire load is rolled back on any exception.
@@ -133,57 +185,4 @@ class TestModelLoader(TransactionTestCase):
         # Verify that the transaction was rolled back.
         result_set = models.DocumentsLanguages.objects.select_related().all()
         self.assertEqual(len(result_set), 0)
-
-    def test_existing_record_warnings(self):
-        """
-        Test that warnings are emitted each time record already exists in DB.
-
-        Warnings are also tested in other test cases but if this fails, at least
-        one knows exactly where to begin looking for other test failures.
-
-        """
-        # Configure the mock module to return two models instead of one.
-        duplicate_docslangs = models.DocumentsLanguages(
-            document_id=self._docs_langs.document_id,
-            language_id=self._docs_langs.language_id,
-            url='should.be.discarded')
-        self._module.get_models.return_value = (
-            self._docs_langs, duplicate_docslangs)
-
-        self._command._load_models(self._module)
-
-        self.assertEqual(self._command.stdout.getvalue().count('warning:'), 2)
-
-    def test_disabled_flag(self):
-        """
-        Test that docsnaps task is inserted as disabled when flag is passed.
-
-        The disabeld flag value is parsed from command line arguments to the
-        Django command.
-
-        """
-        self._command._load_models(self._module, disabled=True)
-        result_set = models.DocumentsLanguages.objects.select_related().all()
-        self.assertEqual(len(result_set), 1)
-        self.assertFalse(result_set.first().is_enabled)
-
-
-class ExceptionAttributeMock(mock.NonCallableMock):
-    """
-    A class to allow side effects in mock attribute access.
-
-    Designed for a specific test of the transaction rollbacks as a result of
-    raised exceptions.
-
-    I may have missed it in the documentation or not yet discovered the
-    canonical way to do it, but it appears that side effects cannot be related
-    to unittest.mock attrbute access operations. I don't want to mess with
-    magic methods so this local class will do for now.
-
-    """
-
-    @property
-    def url(self):
-        raise django.db.Error
-
 
