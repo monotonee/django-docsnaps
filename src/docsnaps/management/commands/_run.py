@@ -31,7 +31,8 @@ class Command(BaseCommand):
         Query the database for active snapshot jobs.
 
         Each DocumentsLanguages record corresponds to a snpashot "job." Each job
-        may have zero or more Snapshot records.
+        may have zero or more Snapshot records which are queried and returned
+        in a separate method.
 
         Returns:
             An iterable. When not empty, elements are DocumentsLanguages model
@@ -41,6 +42,7 @@ class Command(BaseCommand):
             https://docs.djangoproject.com/en/dev/topics/db/sql/#adding-annotations
 
         """
+        #import pdb; pdb.set_trace()
         self.stdout.write('Loading enabled snapshot jobs: ', ending='')
 
         command_error_message = None
@@ -56,11 +58,8 @@ class Command(BaseCommand):
                 self.stdout,
                 command_error_message)
 
-        active_jobs = docsnaps.models.DocumentsLanguages.objects.filter(
-            is_enabled=True)
-
         self.stdout.write(self.style.SUCCESS('success'))
-        return active_jobs
+        return docsnaps_set
 
     async def _execute_jobs(self, active_jobs):
         """
@@ -105,20 +104,21 @@ class Command(BaseCommand):
                 connection pool.
 
         """
+        new_snapshot = await self._request_document(connection_session, job.url)
         self.stdout.write('Pre-sleep')
         await asyncio.sleep(1)
         self.stdout.write('Post-sleep')
         raise Exception('test')
 
-    async def request_document(self, url, connection_session):
+    async def _request_document(self, connection_session, url):
         """
         Request the document from the remote source.
 
         Args:
-            url (string): The URL to which a GET request will be issued.
             connection_session: An HTTP request session. In aiohttp, for
                 example, this is a ClientSession object, an abstraction of a
                 connection pool.
+            url (string): The URL to which a GET request will be issued.
 
         Returns:
             string: A string of the fetched document.

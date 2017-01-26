@@ -5,7 +5,10 @@ Tests the selection of job data from the database.
 
 import datetime
 import io
+import unittest.mock as mock
 
+import django.core.management.base
+import django.db
 from django.test import TestCase
 
 from .. import utils as test_utils
@@ -40,7 +43,8 @@ class TestGetActiveJobs(TestCase):
         snapshot_timedelta = datetime.timedelta(days=1)
         snapshot_datetime = datetime.datetime.today() - snapshot_timedelta
 
-        # Create basic models.
+        # Insert base models. Single active job.
+        # Save a reference to the Document instance for later use.
         test_models = command_utils.flatten_model_graph(documents_languages)
         for model in reversed(list(test_models)):
             if isinstance(model, docsnaps.models.Document):
@@ -48,6 +52,7 @@ class TestGetActiveJobs(TestCase):
             model.save()
 
         # Create Transform records.
+        # Two transform records with sequential priority.
         docsnaps.models.Transform.objects.create(
             document_id=document,
             module='fake.module1',
@@ -58,12 +63,15 @@ class TestGetActiveJobs(TestCase):
             execution_priority=1)
 
         # Create Snapshot records.
+        # Two existing snapshots for the active jobs.
+        # Create old record
         docsnaps.models.Snapshot.objects.create(
             documents_languages_id=documents_languages,
             date=snapshot_datetime.date().isoformat(),
             time=snapshot_datetime.time().isoformat(),
             datetime=snapshot_datetime.isoformat(),
             text='Slightly larger small document.')
+        # Create most recent record.
         snapshot_datetime = snapshot_datetime + snapshot_timedelta
         docsnaps.models.Snapshot.objects.create(
             documents_languages_id=documents_languages,
@@ -72,19 +80,43 @@ class TestGetActiveJobs(TestCase):
             datetime=snapshot_datetime.isoformat(),
             text='Really small document')
 
-    def test_get_active_jobs_existent(self):
+    def test_database_error(self):
         """
-        Test that correct result set was returned.
+        Test exception is properly bubbled when database error occurs.
+
+        The error is re-raised as Django's CommandError.
 
         """
-        #self._command._get_active_jobs()
-        raise NotImplementedError('Complete this test.')
+        mock_filter = mock.Mock(side_effect=django.db.Error)
+        patch_target_obj = docsnaps.models.DocumentsLanguages.objects
+
+        with mock.patch.object(patch_target_obj, 'filter', new=mock_filter):
+            self.assertRaises(
+                django.core.management.base.CommandError,
+                self._command._get_active_jobs)
+
+    def test_get_active_jobs_existent(self):
+        """
+        Test that correct result set was returned when there are active jobs.
+
+        """
+        active_jobs = self._command._get_active_jobs()
+
+        self.assertEqual(len(active_jobs), 1)
 
     def test_get_active_jobs_nonexistent(self):
         """
-        Test that empty result set was correctly returned.
+        Test that empty result set was correctly returned when no active jobs.
+
+        Django's TestCase wraps each test function in a transaction so
+        database operations will not affect other test functios
+
+        See:
+            https://docs.djangoproject.com/en/dev/topics/testing/tools/#testcase
 
         """
-        raise NotImplementedError('Complete this test.')
+        docsnaps.models.DocumentsLanguages.objects.all().update(
+            is_enabled=False)
+        active_jobs = self._command._get_active_jobs()
 
-
+        self.assertEqual(len(active_jobs), 0)
