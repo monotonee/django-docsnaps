@@ -43,7 +43,7 @@ class TestGetActiveJobs(TestCase):
         snapshot_timedelta = datetime.timedelta(days=1)
         snapshot_datetime = datetime.datetime.today() - snapshot_timedelta
 
-        # Insert base models. Single active job.
+        # Insert base models with a single active job.
         # Save a reference to the Document instance for later use.
         test_models = command_utils.flatten_model_graph(documents_languages)
         for model in reversed(list(test_models)):
@@ -63,22 +63,20 @@ class TestGetActiveJobs(TestCase):
             execution_priority=1)
 
         # Create Snapshot records.
-        # Two existing snapshots for the active jobs.
-        # Create old record
+        # Two existing snapshots for the single active job.
         docsnaps.models.Snapshot.objects.create(
             documents_languages_id=documents_languages,
-            date=snapshot_datetime.date().isoformat(),
-            time=snapshot_datetime.time().isoformat(),
-            datetime=snapshot_datetime.isoformat(),
-            text='Slightly larger small document.')
-        # Create most recent record.
+            date=snapshot_datetime.date(),
+            time=snapshot_datetime.time(),
+            datetime=snapshot_datetime,
+            text='Old snapshot. Slightly larger small document.')
         snapshot_datetime = snapshot_datetime + snapshot_timedelta
         docsnaps.models.Snapshot.objects.create(
             documents_languages_id=documents_languages,
-            date=snapshot_datetime.date().isoformat(),
-            time=snapshot_datetime.time().isoformat(),
-            datetime=snapshot_datetime.isoformat(),
-            text='Really small document')
+            date=snapshot_datetime.date(),
+            time=snapshot_datetime.time(),
+            datetime=snapshot_datetime,
+            text='Most recent snapshot. Really small document.')
 
     def test_database_error(self):
         """
