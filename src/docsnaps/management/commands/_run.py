@@ -42,7 +42,6 @@ class Command(BaseCommand):
             https://docs.djangoproject.com/en/dev/topics/db/sql/#adding-annotations
 
         """
-        #import pdb; pdb.set_trace()
         self.stdout.write('Loading enabled snapshot jobs: ', ending='')
 
         command_error_message = None
@@ -79,7 +78,7 @@ class Command(BaseCommand):
                 instances representing records in which is_enabled is True.
 
         """
-        snapshots = self._get_snapshots()
+        snapshots = await self._get_snapshots()
 
         loop = asyncio.get_event_loop()
         with aiohttp.ClientSession() as session:
@@ -126,7 +125,7 @@ class Command(BaseCommand):
         """
         pass
 
-    def _get_snapshots(self):
+    async def _get_snapshots(self):
         """
         Get the latest document snapshot for each active job.
 
@@ -156,8 +155,9 @@ class Command(BaseCommand):
         complex than simple web sites.
 
         Returns:
-            A dictionary of the latest Snapshot text for each Documentslanguages
-            record, keyed by the snapshot's documents_languages_id.
+            dict: A dictionary of the latest Snapshot text for each
+            Documentslanguages record, keyed by the snapshot's
+            documents_languages_id.
 
         """
         snapshot_sql = '''
