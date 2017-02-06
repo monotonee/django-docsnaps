@@ -17,6 +17,7 @@ setup(
     author_email='monotonee@tuta.io',
     include_package_data=True,
     install_requires=[
+        'aiodns',
         'aiohttp',
         'django',
         'mysqlclient'
