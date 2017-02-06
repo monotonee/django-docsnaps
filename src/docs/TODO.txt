@@ -8,3 +8,8 @@ Implement a way to handle plugin module updates.
     "override" flag to install command?
 Replace use of QuerySet.first() with numeric index syntax
     first() issues another DB query, an ORDER BY with LIMIT 1
+
+Add logging to request method
+    Log redirect HTTP codes with low severity
+    Hook into aiohttp's logging
+
