@@ -20,7 +20,7 @@ from django.db.models import prefetch_related_objects
 
 import docsnaps.models
 import docsnaps.management.commands._utils as command_utils
-#import docsnaps.settings
+import docsnaps.settings
 
 
 class Command(BaseCommand):
@@ -126,7 +126,9 @@ class Command(BaseCommand):
             string: A string of the fetched document.
 
         """
-        response = await client_session.get(url, timeout=30) #docsnaps.settings.DOCSNAPS_REQUEST_TIMEOUT
+        response = await client_session.get(
+            url,
+            timeout=docsnaps.settings.DOCSNAPS_REQUEST_TIMEOUT)
         response.raise_for_status()
         response_text = await response.text()
         response.close()

@@ -6,8 +6,17 @@ Tests the selection of job data from the database.
 import asyncio
 import datetime
 import io
+import sys
+import unittest.mock
 
 from django.test import TestCase
+
+# Preemptively replace settings module. Python will believe that the module has
+# already been imported. The module's settings file imports the Django project
+# settings module which, when running these tests outside of a Django project,
+# obviously raises an exception. This must be done before the Command is
+# imported.
+sys.modules['docsnaps.settings'] = unittest.mock.NonCallableMock()
 
 from .. import utils as test_utils
 from docsnaps.management.commands._run import Command
@@ -87,11 +96,11 @@ class TestExecuteJob(TestCase):
         Test correct snapshot creation under ideal conditions.
 
         """
-        active_jobs = self._command._get_active_jobs()
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(self._command._execute_jobs(active_jobs))
-        loop.close()
-        #raise NotImplementedError('Complete this test.')
+        #active_jobs = self._command._get_active_jobs()
+        #loop = asyncio.get_event_loop()
+        #loop.run_until_complete(self._command._execute_jobs(active_jobs))
+        #loop.close()
+        raise NotImplementedError('Complete this test.')
 
     def test_execute_single_job_no_snapshots(self):
         """
