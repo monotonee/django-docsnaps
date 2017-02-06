@@ -4,18 +4,16 @@ Tests the selection of job data from the database.
 """
 
 import asyncio
-import datetime
 import io
+import unittest.mock
 
-from django.test import TestCase
+from django.test import SimpleTestCase
 
 from .. import utils as test_utils
 from docsnaps.management.commands._run import Command
-import docsnaps.management.commands._utils as command_utils
-import docsnaps.models
 
 
-class TestRequestDocument(TestCase):
+class TestRequestDocument(SimpleTestCase):
 
     def setUp(self):
         """
@@ -24,56 +22,7 @@ class TestRequestDocument(TestCase):
 
         """
         self._command = Command(stdout=io.StringIO(), stderr=io.StringIO())
-
-    @classmethod
-    def setUpTestData(self):
-        """
-        Load baseline data for the tests.
-
-        Might switch to fixtures in the future.
-
-        See:
-            https://docs.djangoproject.com/en/dev/topics/testing/tools/#fixture-loading
-
-        """
-        document = None
-        documents_languages = test_utils.get_test_models()[0]
-        snapshot_timedelta = datetime.timedelta(days=1)
-        snapshot_datetime = datetime.datetime.today() - snapshot_timedelta
-
-        # Create basic models.
-        test_models = command_utils.flatten_model_graph(documents_languages)
-        for model in reversed(list(test_models)):
-            if isinstance(model, docsnaps.models.Document):
-                document = model
-            model.save()
-
-        # Create Transform records.
-        docsnaps.models.Transform.objects.create(
-            document_id=document,
-            module='fake.module1',
-            execution_priority=0)
-        docsnaps.models.Transform.objects.create(
-            document_id=document,
-            module='fake.module2',
-            execution_priority=1)
-
-        # Create Snapshot records.
-        # Create old snapshot.
-        docsnaps.models.Snapshot.objects.create(
-            documents_languages_id=documents_languages,
-            date=snapshot_datetime.date().isoformat(),
-            time=snapshot_datetime.time().isoformat(),
-            datetime=snapshot_datetime.isoformat(),
-            text='Slightly larger small document.')
-        # Create most recent snapshot.
-        snapshot_datetime = snapshot_datetime + snapshot_timedelta
-        docsnaps.models.Snapshot.objects.create(
-            documents_languages_id=documents_languages,
-            date=snapshot_datetime.date().isoformat(),
-            time=snapshot_datetime.time().isoformat(),
-            datetime=snapshot_datetime.isoformat(),
-            text='Really small document')
+        self._client_session_mock = unittest.mock.NonCallableMock()
 
     def test_error_code(self):
         """
@@ -89,9 +38,48 @@ class TestRequestDocument(TestCase):
         """
         raise NotImplementedError('Complete this test.')
 
+    def test_redirect_code(self):
+        """
+        Test redirects in request.
+
+        Redirect should be logged.
+
+        """
+        raise NotImplementedError('Complete this test.')
+
+    def test_request_timeout(self):
+        """
+        Test request timing out.
+
+        Timeout should be logged with moderate to high severity.
+
+        """
+        raise NotImplementedError('Complete this test.')
+
     def test_successful_request(self):
         """
         Test normal, successful HTTP request.
 
+        I'm not sure nested function definitions are good practice here. Review.
+
         """
-        raise NotImplementedError('Complete this test.')
+        # Define awaitable response mock.
+        document_text = 'Documents snapshot.'
+        async def mock_text_coroutine(*args, **kwargs):
+            return document_text
+        response_mock = unittest.mock.NonCallableMock()
+        response_mock.text = mock_text_coroutine
+
+        # Define awaitable get() mock.
+        async def mock_get_coroutine(*args, **kwargs):
+            return response_mock
+        self._client_session_mock.get = mock_get_coroutine
+
+        loop = asyncio.get_event_loop()
+        text = loop.run_until_complete(
+            self._command._request_document(
+                self._client_session_mock,
+                'test.tset'))
+
+        self.assertEqual(text, document_text)
+        self.assertTrue(response_mock.close.called)

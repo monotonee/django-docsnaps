@@ -20,6 +20,7 @@ from django.db.models import prefetch_related_objects
 
 import docsnaps.models
 import docsnaps.management.commands._utils as command_utils
+#import docsnaps.settings
 
 
 class Command(BaseCommand):
@@ -81,40 +82,42 @@ class Command(BaseCommand):
         snapshots = await self._get_snapshots()
 
         loop = asyncio.get_event_loop()
-        with aiohttp.ClientSession() as session:
+        with aiohttp.ClientSession() as client_session:
             tasks = []
             for job in active_jobs:
                 snapshot = snapshots.get(job.documents_languages_id, None)
                 task = loop.create_task(
-                    self._execute_job(job, session, snapshot))
+                    self._execute_job(job, client_session, snapshot))
                 tasks.append(task)
 
             done, pending = await asyncio.wait(tasks)
 
-    async def _execute_job(self, job, connection_session, snapshot_text=None):
+    async def _execute_job(self, job, client_session, snapshot_text=None):
         """
         Execute a single snapshot job.
 
         Args:
             job (DocumentsLanguages): A DocumentsLanguages model instance.
             snapshot_text (string): The text of the job's most recent snapshot.
-            connection_session: An HTTP request session. In aiohttp, for
+            client_session: An HTTP request session. In aiohttp, for
                 example, this is a ClientSession object, an abstraction of a
                 connection pool.
 
         """
-        new_snapshot = await self._request_document(connection_session, job.url)
+        new_snapshot = await self._request_document(client_session, job.url)
         self.stdout.write('Pre-sleep')
         await asyncio.sleep(1)
         self.stdout.write('Post-sleep')
         raise Exception('test')
 
-    async def _request_document(self, connection_session, url):
+    async def _request_document(self, client_session, url):
         """
         Request the document from the remote source.
 
+        May need more robust response handling than raise_for_status().
+
         Args:
-            connection_session: An HTTP request session. In aiohttp, for
+            client_session: An HTTP request session. In aiohttp, for
                 example, this is a ClientSession object, an abstraction of a
                 connection pool.
             url (string): The URL to which a GET request will be issued.
@@ -123,7 +126,12 @@ class Command(BaseCommand):
             string: A string of the fetched document.
 
         """
-        pass
+        response = await client_session.get(url, timeout=30) #docsnaps.settings.DOCSNAPS_REQUEST_TIMEOUT
+        response.raise_for_status()
+        response_text = await response.text()
+        response.close()
+
+        return response_text
 
     async def _get_snapshots(self):
         """
