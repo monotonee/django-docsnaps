@@ -1,6 +1,13 @@
 """
 Tests the selection of job data from the database.
 
+These tests create tight coupling to the aiohttp library. The other alternative
+to mocking aiohttp objects is to use a Docker web server container to serve
+bare-bones pages to test HTTP response codes, timeouts, etc.
+
+Alternative is possibly to use the http.server module to start and stop a web
+server here in this test file, defining handlers for the GET method.
+
 """
 
 import asyncio
@@ -9,8 +16,8 @@ import sys
 import unittest.mock
 
 import aiohttp
-import aiohttp.errors
 from django.test import SimpleTestCase
+import yarl
 
 # Preemptively replace settings module. Python will believe that the module has
 # already been imported. The module's settings file imports the Django project
@@ -23,9 +30,16 @@ from .. import utils as test_utils
 from docsnaps.management.commands._run import Command
 
 
-patch_attributes = {'DOCSNAPS_REQUEST_TIMEOUT': 0.1}
+patch_attributes = {'DOCSNAPS_REQUEST_TIMEOUT': 0.5}
 @unittest.mock.patch('docsnaps.settings', create=True, **patch_attributes)
 class TestRequestDocument(SimpleTestCase):
+    """
+    Patch the module settings into every test case. The sys.modules manipulation
+    ensures the import statements never actually hit the import system and the
+    patch ensures that the replacement value occupies the correct name within
+    the test subject module's namespace.
+
+    """
 
     def setUp(self):
         """
@@ -34,30 +48,29 @@ class TestRequestDocument(SimpleTestCase):
 
         """
         self._command = Command(stdout=io.StringIO(), stderr=io.StringIO())
-        self._client_session_mock = unittest.mock.NonCallableMock()
+        self._test_url = 'http://url.test'
 
     def test_error_code(self, docsnaps_settings_mock):
         """
         Test unsuccessful HTTP response code.
 
-        """
-        raise NotImplementedError('Complete this test.')
-
-    def test_no_response(self, docsnaps_settings_mock):
-        """
-        Test no response from remote host, testing timeout.
+        I'm not happy with this test as I'm not sure it actually serves a
+        purpose given the way it's implemented.
 
         """
-        raise NotImplementedError('Complete this test.')
+        async def _mock_get(*args, **kwargs):
+            response = aiohttp.ClientResponse(
+                aiohttp.hdrs.METH_GET,
+                yarl.URL(self._test_url))
+            response.status = 404
+            return response
+        client_session = unittest.mock.Mock(get=_mock_get)
+        loop = asyncio.get_event_loop()
 
-    def test_redirect_code(self, docsnaps_settings_mock):
-        """
-        Test redirects in request.
-
-        Redirect should be logged.
-
-        """
-        raise NotImplementedError('Complete this test.')
+        self.assertRaises(
+            aiohttp.errors.HttpProcessingError,
+            loop.run_until_complete,
+            self._command._request_document(client_session, self._test_url))
 
     def test_request_timeout(self, docsnaps_settings_mock):
         """
@@ -65,27 +78,30 @@ class TestRequestDocument(SimpleTestCase):
 
         Timeout should be logged with moderate to high severity.
 
-        """
-        # Construct a real connector and mock its connect() method.
-        # See: https://github.com/KeepSafe/aiohttp/blob/master/aiohttp/client.py
-        # See the __init__ and _request methods.
-        async def mock_connect_coroutine(*args, **kwargs):
-            await asyncio.sleep(
-                docsnaps_settings_mock.DOCSNAPS_REQUEST_TIMEOUT + 0.1)
-        loop = asyncio.get_event_loop()
-        connector = aiohttp.TCPConnector(loop=loop)
-        connector.connect = mock_connect_coroutine
+        Nested coroutine function defined because aiohttp complains when
+        ClientSession is not instantiated from within coroutine. Additionally,
+        I prefer to at least attempt to test the instance's creation in a
+        context similar to that of production.
 
-        async def client_session_coroutine(connector):
-            async with aiohttp.ClientSession(connector=connector) as session:
+        """
+        async def _client_session_creation_coroutine(**kwargs):
+            async with aiohttp.ClientSession(**kwargs) as session:
                 await self._command._request_document(
                     session,
-                    'http://url.test')
+                    self._test_url)
+
+        async def _mock_connect_coroutine(self, *args, **kwargs):
+            await asyncio.sleep(
+                patch_attributes['DOCSNAPS_REQUEST_TIMEOUT'] + 0.1)
+
+        loop = asyncio.get_event_loop()
+        connector = aiohttp.TCPConnector(loop=loop)
+        connector.connect = _mock_connect_coroutine
 
         self.assertRaises(
             aiohttp.errors.TimeoutError,
             loop.run_until_complete,
-            client_session_coroutine(connector))
+            _client_session_creation_coroutine(connector=connector))
 
     def test_successful_request(self, docsnaps_settings_mock):
         """
@@ -104,13 +120,14 @@ class TestRequestDocument(SimpleTestCase):
         # Define awaitable get() mock.
         async def mock_get_coroutine(*args, **kwargs):
             return response_mock
-        self._client_session_mock.get = mock_get_coroutine
+        client_session_mock = unittest.mock.NonCallableMock(
+            get=mock_get_coroutine)
 
         loop = asyncio.get_event_loop()
         text = loop.run_until_complete(
             self._command._request_document(
-                self._client_session_mock,
-                'http://url.test'))
+                client_session_mock,
+                self._test_url))
 
         self.assertEqual(text, document_text)
         self.assertTrue(response_mock.close.called)
