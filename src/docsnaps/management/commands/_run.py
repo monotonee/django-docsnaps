@@ -171,7 +171,7 @@ class Command(BaseCommand):
         string.
 
         I refuse to use manager.raw() as select_related() is not supported and
-        the Snapshot models will issue a separate query for EVERY
+        the Snapshot models will therefore issue a separate query for EVERY
         DocumentsLanguages PK access.
 
         The only other alternative is to use QuerySet.iterator() to look for and
