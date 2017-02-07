@@ -108,3 +108,13 @@ class TestExecuteJob(TestCase):
 
         """
         raise NotImplementedError('Complete this test.')
+
+    def test_job_exception(self):
+        """
+        Test behavior if a job completes with exception raised.
+
+        Entire process should not be halted but failure should output to console
+        and it should be logged.
+
+        """
+        pass
