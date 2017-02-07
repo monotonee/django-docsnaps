@@ -6,7 +6,7 @@ Tests the selection of job data from the database.
 import datetime
 import io
 import sys
-import unittest.mock as mock
+import unittest.mock
 
 import django.core.management.base
 import django.db
@@ -17,7 +17,7 @@ from django.test import TestCase
 # settings module which, when running these tests outside of a Django project,
 # obviously raises an exception. This must be done before the Command is
 # imported.
-sys.modules['docsnaps.settings'] = mock.NonCallableMock()
+sys.modules['docsnaps.settings'] = unittest.mock.NonCallableMock()
 
 from .. import utils as test_utils
 from docsnaps.management.commands._run import Command
@@ -93,10 +93,13 @@ class TestGetActiveJobs(TestCase):
         The error is re-raised as Django's CommandError.
 
         """
-        mock_filter = mock.Mock(side_effect=django.db.Error)
+        mock_filter = unittest.mock.Mock(side_effect=django.db.Error)
         patch_target_obj = docsnaps.models.DocumentsLanguages.objects
 
-        with mock.patch.object(patch_target_obj, 'filter', new=mock_filter):
+        with unittest.mock.patch.object(
+            patch_target_obj,
+            'filter',
+            new=mock_filter):
             self.assertRaises(
                 django.core.management.base.CommandError,
                 self._command._get_active_jobs)
