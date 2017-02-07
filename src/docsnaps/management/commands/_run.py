@@ -117,6 +117,18 @@ class Command(BaseCommand):
         May need more robust response handling than raise_for_status().
         Note that aiohttp's ClientSession will follow redirects by default.
 
+        There is currently no catching and re-raising of exceptions since,
+        according to my current undrstanding, the exception will be caught and
+        saved by the asyncio.Task wrapper class. The exception will bubble up
+        to the main "execute all jobs" method/coroutine" where, after all
+        coroutine execution is complete, the tasks will be examined for
+        exceptions.
+
+        Possible errors:
+            aiohttp.errors.ClientError,
+            aiohttp.errors.HttpProcessingError,
+            aiohttp.errors.TimeoutError
+
         Args:
             client_session: An HTTP request session. In aiohttp, for
                 example, this is a ClientSession object, an abstraction of a
@@ -125,6 +137,9 @@ class Command(BaseCommand):
 
         Returns:
             string: A string of the fetched document.
+
+        See:
+            https://github.com/KeepSafe/aiohttp/blob/master/aiohttp/errors.py
 
         """
         response = await client_session.get(
