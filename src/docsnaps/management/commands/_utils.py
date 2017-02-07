@@ -73,7 +73,7 @@ def raise_command_error(stdout, message):
     framework expects and will handle.
 
     Args:
-        stdout: An IO stream. Ised to output
+        stdout: An IO stream. Used to output
         message (string or Exception): The message to pass to the exception
             constructor. Whatever is passed to an Exception constructor
             seems to be implicitly converted to a string. All Exception
