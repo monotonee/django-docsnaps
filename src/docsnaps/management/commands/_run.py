@@ -115,6 +115,7 @@ class Command(BaseCommand):
         Request the document from the remote source.
 
         May need more robust response handling than raise_for_status().
+        Note that aiohttp's ClientSession will follow redirects by default.
 
         Args:
             client_session: An HTTP request session. In aiohttp, for
