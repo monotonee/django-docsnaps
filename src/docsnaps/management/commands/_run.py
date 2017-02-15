@@ -104,7 +104,8 @@ class Command(BaseCommand):
                 connection pool.
 
         """
-        new_snapshot = await self._request_document(client_session, job.url)
+        raw_snapshot = await self._request_document(client_session, job.url)
+        processed_snapshot = await self._transform_document(job, raw_snapshot)
         self.stdout.write('Pre-sleep')
         await asyncio.sleep(1)
         self.stdout.write('Post-sleep')
@@ -150,6 +151,22 @@ class Command(BaseCommand):
         response.close()
 
         return response_text
+
+    async def _transform_document(self, job, raw_snapshot):
+        """
+        Apply all transforms to the document.
+
+        Args:
+            raw_snapshot (string): The raw document, freshly-fetched from the
+                remote source.
+
+        Returns:
+            string: The document after all transforms have been applied
+                sequentially.
+
+        """
+        import pdb; pdb.set_trace()
+        pass
 
     async def _get_snapshots(self):
         """
