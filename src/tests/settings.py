@@ -1,6 +1,6 @@
 """
 See:
-    https://docs.djangoproject.com/en/1.10/topics/testing/advanced/#using-the-django-test-runner-to-test-reusable-applications
+    https://docs.djangoproject.com/en/dev/topics/testing/advanced/#using-the-django-test-runner-to-test-reusable-applications
 
 """
 SECRET_KEY = 'fake-key'
@@ -14,10 +14,6 @@ DATABASES = {
         'USER': 'tester',
     }
 }
-
-# DATABASE_ROUTERS = [
-    # 'docsnaps.routers.Router'
-# ]
 
 INSTALLED_APPS = [
     'docsnaps.apps.DocsnapsConfig',

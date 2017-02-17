@@ -13,3 +13,4 @@ Add logging to request method
     Log redirect HTTP codes with low severity
     Hook into aiohttp's logging
 
+Test database router use with separate docsnaps database
