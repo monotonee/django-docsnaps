@@ -109,7 +109,8 @@ done
 
 # Project-specific tasks
 echo 'TASK: Install Python packages and modules.'
-su vagrant -l -c 'cd src && pip install --user -r requirements/dev.txt'
+cd ${src_dir}
+su ${default_user} -c 'cd src && pip install --user -r requirements/dev.txt'
 
 # Reboot system.
 # Actual reboot removed for now since rebooting outside of Vagrant's control
