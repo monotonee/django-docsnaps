@@ -24,7 +24,7 @@ setup(
     ],
     license='MIT',
     packages=find_packages(),
-    # url='<url here>',
+    url='https://github.com/monotonee/django-docsnaps',
 
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
