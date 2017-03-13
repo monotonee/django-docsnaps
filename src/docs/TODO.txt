@@ -1,13 +1,17 @@
-Add function argument annotations
+Add function argument annotations?
 Add default data to migrations using Django's RunPython or RunSQL
-Run style checkers (pep8 and/or autopep8)
+Run style checkers/linters (pylint)
 Review use of primary keys in tests that use models
 Implement a way to handle plugin module updates.
     Uninstall and reinstall?
     Separate "update" command?
     "override" flag to install command?
+    Simply reinstall overwrites URL if different.
 Replace use of QuerySet.first() with numeric index syntax
     first() issues another DB query, an ORDER BY with LIMIT 1
+Include a "default" module in django_docsnaps for use if adding document
+    manually, separately from plugin module
+    Module will apply no transform but simply compare raw snapshots.
 
 Add logging to request method
     Log redirect HTTP codes with low severity
