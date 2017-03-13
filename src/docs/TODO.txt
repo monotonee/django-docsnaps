@@ -14,3 +14,5 @@ Add logging to request method
     Hook into aiohttp's logging
 
 Test database router use with separate docsnaps database
+
+Generate migrations once model has solidified.
