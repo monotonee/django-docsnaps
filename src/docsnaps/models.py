@@ -27,11 +27,11 @@ See:
 
 """
 
-from django.db import models
+import django.db.models
 import django_forcedfields as forcedfields
 
 
-class Document(models.Model):
+class Document(django.db.models.Model):
     """
     A document that will be monitored for changes.
 
@@ -42,16 +42,23 @@ class Document(models.Model):
 
     """
 
-    document_id = models.AutoField(primary_key=True)
-    module = models.CharField(
-        blank=False, default=None, max_length=255, null=False,
+    document_id = django.db.models.AutoField(primary_key=True)
+    module = django.db.models.CharField(
+        blank=False,
+        default=None,
+        max_length=255,
+        null=False,
         help_text=(
             'The name of the module from which this record was installed.'))
-    name = models.CharField(
-        blank=False, default=None, max_length=255, null=False,
+    name = django.db.models.CharField(
+        blank=False,
+        default=None,
+        max_length=255,
+        null=False,
         help_text='The name of the document.')
     updated_timestamp = forcedfields.TimestampField(auto_now=True)
-    languages = models.ManyToManyField('Language', through='DocumentsLanguages')
+    languages = django.db.models.ManyToManyField(
+        'Language', through='DocumentsLanguages')
 
     def __str__(self):
         return self.name
@@ -61,7 +68,7 @@ class Document(models.Model):
         unique_together = ('module', 'name')
 
 
-class Language(models.Model):
+class Language(django.db.models.Model):
     """
     A language in which a document may be written.
 
@@ -75,13 +82,21 @@ class Language(models.Model):
 
     """
 
-    language_id = models.AutoField(primary_key=True)
-    name = models.CharField(
-        blank=False, default=None, max_length=255, null=False)
+    language_id = django.db.models.AutoField(primary_key=True)
+    name = django.db.models.CharField(
+        blank=False,
+        default=None,
+        max_length=255,
+        null=False)
     code_iso_639_1 = forcedfields.FixedCharField(
-        blank=False, default=None, max_length=2, null=False, unique=True,
+        blank=False,
+        default=None,
+        max_length=2,
+        null=False,
+        unique=True,
         verbose_name='ISO 639-1 code')
-    documents = models.ManyToManyField(Document, through='DocumentsLanguages')
+    documents = django.db.models.ManyToManyField(
+        Document, through='DocumentsLanguages')
 
     def __str__(self):
         return self.code_iso_639_1
@@ -90,7 +105,7 @@ class Language(models.Model):
         db_table = 'language'
 
 
-class DocumentsLanguages(models.Model):
+class DocumentsLanguages(django.db.models.Model):
     """
     A many-to-many relationship between a document and a language.
 
@@ -109,16 +124,20 @@ class DocumentsLanguages(models.Model):
 
     """
 
-    documents_languages_id = models.AutoField(primary_key=True)
-    document_id = models.ForeignKey(
-        Document, db_column='document_id', on_delete=models.PROTECT,
+    documents_languages_id = django.db.models.AutoField(primary_key=True)
+    document_id = django.db.models.ForeignKey(
+        Document,
+        db_column='document_id',
+        on_delete=django.db.models.PROTECT,
         verbose_name='document')
-    language_id = models.ForeignKey(
-        Language, db_column='language_id', on_delete=models.PROTECT,
+    language_id = django.db.models.ForeignKey(
+        Language,
+        db_column='language_id',
+        on_delete=django.db.models.PROTECT,
         verbose_name='language')
-    url = models.URLField(
+    url = django.db.models.URLField(
         blank=False, default=None, max_length=255, null=False)
-    is_enabled = models.BooleanField(default=True)
+    is_enabled = django.db.models.BooleanField(default=True)
     updated_timestamp = forcedfields.TimestampField(auto_now=True)
 
     class Meta:
@@ -127,7 +146,7 @@ class DocumentsLanguages(models.Model):
         verbose_name = 'document instance'
 
 
-class Snapshot(models.Model):
+class Snapshot(django.db.models.Model):
     """
     A snapshot of a document in a given language.
 
@@ -136,14 +155,16 @@ class Snapshot(models.Model):
 
     """
 
-    snapshot_id = models.AutoField(primary_key=True)
-    documents_languages_id = models.ForeignKey(
-        DocumentsLanguages, db_column='documents_languages_id',
-        on_delete=models.PROTECT, verbose_name='document instance')
-    date = models.DateField(null=False)
-    time = models.TimeField(null=False)
-    datetime = models.DateTimeField(db_index=True, null=False)
-    text = models.TextField(blank=True, null=True)
+    snapshot_id = django.db.models.AutoField(primary_key=True)
+    documents_languages_id = django.db.models.ForeignKey(
+        DocumentsLanguages,
+        db_column='documents_languages_id',
+        on_delete=django.db.models.PROTECT,
+        verbose_name='document instance')
+    date = django.db.models.DateField(null=False)
+    time = django.db.models.TimeField(null=False)
+    datetime = django.db.models.DateTimeField(db_index=True, null=False)
+    text = django.db.models.TextField(blank=True, null=True)
 
     class Meta:
         db_table = 'snapshot'
