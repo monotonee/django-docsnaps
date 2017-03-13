@@ -1,6 +1,15 @@
 """
 Note that include_package_data enables MANIFEST.in consumption.
 
+See:
+    https://setuptools.readthedocs.io/en/latest/setuptools.html#including-data-files
+
+Using semantic verisioning.
+
+See:
+    https://www.python.org/dev/peps/pep-0440/#public-version-identifiers
+    http://semver.org/
+
 """
 
 import os
@@ -20,10 +29,11 @@ setup(
         'aiodns',
         'aiohttp',
         'django',
+        'django-forcedfields',
         'mysqlclient'
     ],
     license='MIT',
-    packages=find_packages(),
+    packages=find_packages(exclude=('tests',)),
     url='https://github.com/monotonee/django-docsnaps',
 
     classifiers=[
@@ -34,7 +44,9 @@ setup(
         'Natural Language :: English',
         'Programming Language :: Python :: 3',
     ],
-    description='Monitors documents and saves snapshots on change.',
+    description=(
+        'Monitors remote documents and saves snapshots when changes are '
+        'detected.'),
     keywords='change django document snapshots',
     long_description=README
 )
