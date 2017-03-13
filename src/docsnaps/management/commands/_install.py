@@ -1,13 +1,20 @@
 """
 A Django admin command that will install a new snapshot job.
 
+All necessary data for the new job is loaded into the database.
+
 Before attempting to load the plugin module's data into the database, validation
 is performed on the module. This is done to ease plugin module development by
 providing helpful and explicit error messages. However, I'm not sure the benefit
 is worth the cost in maintenance. If these validation methods prove to inhibit
 module API changes or prove to be too brittle, then they will be removed.
 
-All necessary data for the new job is loaded into the database.
+Note that exceptions are caught in each private method instead of using a single
+try-except block in the handle() method. This is done to allow more specificity
+of exception classes in the except clause. Due to the wide array of operations
+occurring under the handle() method, the set of possible exception classes
+becomes too large and increases the risk of catching an exception that should
+be allowed to bubble.
 
 """
 from collections import deque
@@ -36,10 +43,11 @@ class Command(BaseCommand):
                 plugin module.
 
         Returns:
-            module: The module returned by importlib.import_module if successful.
+            module: The module returned by importlib.import_module if
+                successful.
 
         Raises:
-            django.core.management.base.CommandError: If import fails
+            django.core.management.base.CommandError: If import fails.
 
         """
         self.stdout.write('Attempting to load module: ', ending='')
@@ -111,19 +119,17 @@ class Command(BaseCommand):
         """
         self.stdout.write('Validating module interface: ', ending='')
 
-        # Check module interface.
         necessary_callables = ['get_models', 'transform']
         error_message = None
         for callable_name in necessary_callables:
             if not hasattr(module, callable_name):
-                error_message = (
-                    'No attribute "' + callable_name +
-                    '" in ' + module.__name__ + '.')
+                error_message = 'No attribute "{!s}" in {!s}.'
             elif not callable(getattr(module, callable_name)):
-                error_message = (
-                    callable_name + ' is not callable in ' +
-                    module.__name__ + '.')
+                error_message = '"{!s}" is not callable in {!s}.'
             if error_message:
+                error_message = error_message.format(
+                    callable_name,
+                    module.__name__)
                 command_utils.raise_command_error(self.stdout, error_message)
 
         self.stdout.write(self.style.SUCCESS('success'))
