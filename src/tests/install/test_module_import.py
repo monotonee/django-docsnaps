@@ -13,13 +13,20 @@ from docsnaps.management.commands._install import Command
 
 
 class TestImportModule(SimpleTestCase):
+    """
+    Tests of the "install" subcommand's plugin module import.
+
+    The plugin module must exist and must be successfully imported before it
+    can be used.
+
+    """
 
     def setUp(self):
         self._command = Command(stdout=io.StringIO(), stderr=io.StringIO())
 
     def test_module_load_failure(self):
         """
-        Module fails to be imported.
+        Test that module import failure raises a CommandError.
 
         """
         self.assertRaisesRegex(
@@ -27,16 +34,13 @@ class TestImportModule(SimpleTestCase):
             r'^No module .*$',
             self._command._import_module,
             'dodge.this')
-        self.assertIn('failed', self._command.stdout.getvalue())
 
     def test_module_load_success(self):
         """
-        Module is imported successfully.
+        Test that a module can be imported successfully.
 
         """
         module = self._command._import_module('bisect')
 
         self.assertIsInstance(module, types.ModuleType)
         self.assertIn('success', self._command.stdout.getvalue())
-
-
