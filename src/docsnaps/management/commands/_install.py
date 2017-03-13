@@ -65,7 +65,7 @@ class Command(BaseCommand):
 
         All of the module's data is loaded in a transaction.
 
-        Only one exception can be a thread at a given time. Defer raising
+        Only one exception can be in a thread at a given time. Defer raising
         CommandError until after exiting try:except block.
 
         Args:
@@ -83,12 +83,11 @@ class Command(BaseCommand):
                 for model in module.get_models():
                     model_loader = ModelLoader(
                         model,
-                        module.__name__,
                         disabled=disabled)
         except django.core.exceptions.MultipleObjectsReturned:
             command_error_message = (
                 'Multiple identical records returned for this module\'s data.'
-                'This indicates a data integrity violations in the database.')
+                'This indicates a data integrity violation in the database.')
         except django.db.Error as exception:
             command_error_message = (
                 'A database error occurred: ' + str(exception))
@@ -138,10 +137,9 @@ class Command(BaseCommand):
         """
         Validate that the module returns complete model hierarchy.
 
-        Checks for the full model relationship tree, from Company to
-        DocumentsLanguages. The plugin module must provide an iterable of
-        DocumentsLanguages instances, the relationship fields of which will be
-        traversed.
+        Checks for the full model relationship tree. The plugin module must
+        provide an iterable of DocumentsLanguages instances, the relationship
+        fields of which will be traversed.
 
         The goal in validating the models is not to attempt to circumvent
         Pythonic duck typing, but to generate helpful error messages for plugin
@@ -176,9 +174,9 @@ class Command(BaseCommand):
 
         # Ensure returned models value is an iterable of correct types and
         # minimum necessary model relationship trees are provided.
+        # Consider using set.symmetric_difference().
+        # https://docs.python.org/3/library/stdtypes.html#set.symmetric_difference
         required_classes = {
-            models.Company,
-            models.Service,
             models.Document,
             models.Language,
             models.DocumentsLanguages}
@@ -240,8 +238,8 @@ class ModelLoader:
     new models are inserted. Edge cases and exceptional conditions are accounted
     for and, if exceptions are raised, they are allowed to bubble.
 
-    Loading attempted upon instance initialization. The entire loading operation
-    is an atomic operation. Either all models are loaded or none are.
+    Loading attempted upon instance initialization. Transactional atomicity is
+    up to the calling context.
 
     This class is designed for use within the context of this module. All plugin
     module validation is assumed to have been done prior to the instantiation of
@@ -254,22 +252,20 @@ class ModelLoader:
 
     """
 
-    def __init__(self, model, module_name: str, disabled=False):
+    def __init__(self, model, disabled=False):
         """
         Initialize an instance.
 
         Args:
-            module (module): A module object as returned by importlib. The
-                module from which the model was returned. The module name is
-                used to populate database records.
-            model (docsnaps.models.DocumentsLanguages)
+            model (docsnaps.models.DocumentsLanguages): The root of the model
+                relationship graph.
             disabled (boolean): If set to True, disables the new job on insert.
                 If false, value
 
         """
         self._disabled = disabled
         self._model = model
-        self._module_name = module_name
+
         self.load_successful = False
         self.warnings = []
 
@@ -346,41 +342,37 @@ class ModelLoader:
             https://docs.djangoproject.com/en/dev/ref/models/querysets/#get-or-create
 
         """
-        # Company
-        new_company = self._model.document_id.service_id.company_id
-        company, created = models.Company.objects.get_or_create(
-            name=new_company.name,
-            defaults={'website': new_company.website})
-        if new_company.website != company.website:
-            self.warnings.append(
-                self._generate_warning(company, new_company, ['website']))
-
-        # Service
-        new_service = self._model.document_id.service_id
-        service, created = models.Service.objects.get_or_create(
-            name=new_service.name,
-            company_id=company,
-            defaults={'website': new_service.website})
-        if new_service.website != service.website:
-            self.warnings.append(
-                self._generate_warning(service, new_service, ['website']))
-
         # Document
         new_document = self._model.document_id
         document, created = models.Document.objects.get_or_create(
-            name=new_document.name,
-            service_id=service)
+            module=new_document.module,
+            name=new_document.name)
+        if not created:
+            warning = 'Document "{!s}" for module {!s} already exists.'
+            warning = warning.format(new_document.name, new_document.module)
+            self.warnings.append(warning)
 
         # Language
         new_language = self._model.language_id
         language, created = models.Language.objects.get_or_create(
             code_iso_639_1=new_language.code_iso_639_1,
             defaults={'name': new_language.name})
-        if new_language.name != language.name:
-            self.warnings.append(
-                self._generate_warning(language, new_language, ['name']))
+        if not created:
+            warning = (
+                'Language with 639-1 ISO code "{!s}" already exists. '
+                'New record not inserted.')
+            warning = warning.format(new_language.code_iso_639_1)
+            if new_language.name.lower() != language.name.lower():
+                name_warning = (
+                    'Additionally, existing record has name "{!s}" while the '
+                    'new record had name "{!s}".')
+                name_warning = name_warning.format(
+                    language.code_iso_639_1, new_language.code_iso_639_1)
+                warning = ' '.join([warning, name_warning])
+            self.warnings.append(warning)
 
         # DocumentsLanguages
+        # Updates URL if different.
         is_enabled = self._disabled == False
         new_docs_langs = self._model
         docs_langs, created = models.DocumentsLanguages.objects.get_or_create(
@@ -389,27 +381,26 @@ class ModelLoader:
             defaults={
                 'url': new_docs_langs.url,
                 'is_enabled': is_enabled})
-        differing_fields = []
-        if new_docs_langs.url != docs_langs.url:
-            differing_fields.append('url')
-        elif new_docs_langs.is_enabled != docs_langs.is_enabled:
-            differing_fields.append('is_enabled')
-        if differing_fields:
-            self.warnings.append(
-                self._generate_warning(
-                    docs_langs,
-                    new_docs_langs,
-                    differing_fields))
+        # If this block is entered, Document warning has already been issued.
+        if not created and new_docs_langs.url != docs_langs.url:
+            old_url = docs_langs.url
+            docs_langs.url = new_docs_langs.url
+            docs_langs.save()
+            warning = (
+                'Updated document instance URL. Old URL was: "{!s}". '
+                'New URL is: "{!s}".')
+            warning = warning.format(old_url, new_docs_langs.url)
+            self.warnings.append(warning)
 
         # Transform
-        transform, created = models.Transform.objects.get_or_create(
-            document_id=document,
-            module=self._module_name)
-        if not created:
-            self.warnings.append(
-                transform.__class__.__name__ + ': '
-                'Module ' + self._module_name + ' already registered '
-                'transform for ' + str(document) + '.')
+        # transform, created = models.Transform.objects.get_or_create(
+            # document_id=document,
+            # module=self._module_name)
+        # if not created:
+            # self.warnings.append(
+                # transform.__class__.__name__ + ': '
+                # 'Module ' + self._module_name + ' already registered '
+                # 'transform for ' + str(document) + '.')
 
         self.load_successful = True
 

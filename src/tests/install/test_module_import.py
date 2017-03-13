@@ -29,9 +29,8 @@ class TestImportModule(SimpleTestCase):
         Test that module import failure raises a CommandError.
 
         """
-        self.assertRaisesRegex(
+        self.assertRaises(
             CommandError,
-            r'^No module .*$',
             self._command._import_module,
             'dodge.this')
 

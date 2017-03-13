@@ -3,7 +3,7 @@ Utility and common functions used in testing.
 
 """
 
-import docsnaps.models as models
+import docsnaps.models
 
 
 def get_test_models(omit=None):
@@ -15,7 +15,7 @@ def get_test_models(omit=None):
 
         Note the explicit primary key values. This is done to facilitate
         comparison of QuerySet results. Without these explicit primary key
-        values, attempt to compare these model instances with query result sets
+        values, attempts to compare these model instances with query result sets
         fails. To overcome this comparison failure would increase complexity of
         test assertions to an untenable level given the composite keys and
         foreign key constraints.
@@ -27,8 +27,8 @@ def get_test_models(omit=None):
                 returned, the return value will be an empty iterable.
 
         Returns:
-            iterable: Iterable of DocumentsLanguages model instances.
-                If DocumentsLanguages were omitted using the optional keyword
+            sequence: Sequence of DocumentsLanguages model instances. If
+                DocumentsLanguages were omitted using the optional keyword
                 argument, then the iterable will be empty.
 
         Raises:
@@ -40,40 +40,25 @@ def get_test_models(omit=None):
         model_dict = {}
 
         # Assign models
-        model_name = models.Language.__name__
-        model_dict[model_name] = models.Language(
+        model_name = docsnaps.models.Language.__name__
+        model_dict[model_name] = docsnaps.models.Language(
             language_id=1,
             name='English',
             code_iso_639_1='en') \
             if omit != model_name else None
 
-        model_name = models.Company.__name__
-        model_dict[model_name] = models.Company(
-            company_id=1,
-            name='Test, Inc.',
-            website='https://test.tset') \
-            if omit != model_name else None
-
-        model_name = models.Service.__name__
-        model_dict[model_name] = models.Service(
-            service_id=1,
-            name='Test',
-            website='https://test.tset',
-            company_id=model_dict['Company']) \
-            if omit != model_name else None
-
-        model_name = models.Document.__name__
-        model_dict[model_name] = models.Document(
+        model_name = docsnaps.models.Document.__name__
+        model_dict[model_name] = docsnaps.models.Document(
             document_id=1,
-            name='Terms of Use',
-            service_id=model_dict['Service']) \
+            module='fake.module',
+            name='Terms of Use') \
             if omit != model_name else None
 
-        model_name = models.DocumentsLanguages.__name__
-        model_dict[model_name] = models.DocumentsLanguages(
+        model_name = docsnaps.models.DocumentsLanguages.__name__
+        model_dict[model_name] = docsnaps.models.DocumentsLanguages(
             documents_languages_id=1,
-            document_id=model_dict[models.Document.__name__],
-            language_id=model_dict[models.Language.__name__],
+            document_id=model_dict[docsnaps.models.Document.__name__],
+            language_id=model_dict[docsnaps.models.Language.__name__],
             url='help.test.tset/legal/termsofuse?locale=en') \
             if omit != model_name else None
 
@@ -85,6 +70,7 @@ def get_test_models(omit=None):
                 'No such model is returned by this function.')
 
         # Define return iterable.
+        # model_name will be the DocumentsLanguages class name or None.
         return_iterable = ()
         if model_dict[model_name]:
             return_iterable = (model_dict[model_name],)
