@@ -5,20 +5,11 @@ Tests the selection of job data from the database.
 
 import datetime
 import io
-import sys
 import unittest.mock
 
-import django.conf
 import django.core.management.base
 import django.db
 import django.test
-
-# Preemptively replace settings module. Python will believe that the module has
-# already been imported. The module's settings file imports the Django project
-# settings module which, when running these tests outside of a Django project,
-# obviously raises an exception. This must be done before the Command is
-# imported.
-sys.modules['docsnaps.settings'] = unittest.mock.NonCallableMock()
 
 from django_docsnaps.management.commands._run import Command
 import django_docsnaps.management.commands._utils as command_utils
