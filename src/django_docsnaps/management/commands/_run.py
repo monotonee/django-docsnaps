@@ -1,6 +1,13 @@
 """
 A Django admin command that will run all enabled snapshot jobs.
 
+Note that exceptions are caught in each private method instead of using a single
+try-except block in the handle() method. This is done to allow more specificity
+of exception classes in the except clause. Due to the wide array of operations
+occurring under the handle() method, the set of possible exception classes
+becomes too large and increases the risk of catching an exception that should
+be allowed to bubble.
+
 TODO: Consider adding a CLI argument to run one or more specific jobs.
 TODO: Create CLI status indicators for each async task. Will require multi-line
     terminal space allocation and tracking of task-to-line association since
@@ -14,18 +21,17 @@ import asyncio
 #from importlib import import_module
 
 import aiohttp
-from django.core.management.base import BaseCommand, CommandError
+import django.conf
+import django.core.management.base
 import django.db
-from django.db.models import prefetch_related_objects
 
-import docsnaps.models
-import docsnaps.management.commands._utils as command_utils
-import docsnaps.settings
+import django_docsnaps.models
+import django_docsnaps.management.commands._utils as command_utils
 
 
-class Command(BaseCommand):
+class Command(django.core.management.base.BaseCommand):
 
-    help = 'Executes active snapshot jobs and saves snapshots of changed docs.'
+    help = 'Executes active jobs and saves snapshots of changed documents.'
 
     def _get_active_jobs(self):
         """
@@ -36,27 +42,27 @@ class Command(BaseCommand):
         in a separate method.
 
         Returns:
-            An iterable. When not empty, elements are DocumentsLanguages model
+            iterable: When not empty, elements are DocumentsLanguages model
             instances.
+
+        Raises:
+            django.core.management.base.CommandError: If database operation
+                fails.
 
         See:
             https://docs.djangoproject.com/en/dev/topics/db/sql/#adding-annotations
 
         """
-        self.stdout.write('Loading enabled snapshot jobs: ', ending='')
+        self.stdout.write('Querying enabled snapshot jobs: ', ending='')
 
         command_error_message = None
         try:
-            docsnaps_set = docsnaps.models.DocumentsLanguages.objects.filter(
-                is_enabled=True)
+            docsnaps_set = django_docsnaps.models.DocumentsLanguages.objects\
+                .filter(is_enabled=True)
         except django.db.Error as exception:
-            command_error_message = (
-                'A database error occurred: ' + str(exception))
-
-        if command_error_message:
             command_utils.raise_command_error(
                 self.stdout,
-                command_error_message)
+                'A database error occurred: ' + str(exception))
 
         self.stdout.write(self.style.SUCCESS('success'))
         return docsnaps_set
@@ -194,8 +200,8 @@ class Command(BaseCommand):
         The only other alternative is to use QuerySet.iterator() to look for and
         save the latest Snapshot for each DocumentsLanguages record. However,
         this still requires iterating over EVERY active snapshot record. ORM
-        layers are such double-edged swords and are meant for nothing more
-        complex than simple web sites.
+        layers are such double-edged swords and are meant for nothing more than
+        very simple web sites.
 
         Returns:
             dict: A dictionary of the latest Snapshot text for each
@@ -252,7 +258,13 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         active_jobs = self._get_active_jobs()
-        if (active_jobs):
+        if active_jobs:
             loop = asyncio.get_event_loop()
             loop.run_until_complete(self._execute_jobs(active_jobs))
             loop.close()
+            run_status = self.style.SUCCESS(
+                'Active jobs completed successfully.')
+        else:
+            run_status = self.style.WARNING('No active jobs found.')
+
+        self.stdout.write('Run complete: ' + run_status)

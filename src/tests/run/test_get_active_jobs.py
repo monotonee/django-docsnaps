@@ -8,9 +8,10 @@ import io
 import sys
 import unittest.mock
 
+import django.conf
 import django.core.management.base
 import django.db
-from django.test import TestCase
+import django.test
 
 # Preemptively replace settings module. Python will believe that the module has
 # already been imported. The module's settings file imports the Django project
@@ -19,13 +20,13 @@ from django.test import TestCase
 # imported.
 sys.modules['docsnaps.settings'] = unittest.mock.NonCallableMock()
 
+from django_docsnaps.management.commands._run import Command
+import django_docsnaps.management.commands._utils as command_utils
+import django_docsnaps.models
 from .. import utils as test_utils
-from docsnaps.management.commands._run import Command
-import docsnaps.management.commands._utils as command_utils
-import docsnaps.models
 
 
-class TestGetActiveJobs(TestCase):
+class TestGetActiveJobs(django.test.TestCase):
 
     def setUp(self):
         """
@@ -55,31 +56,31 @@ class TestGetActiveJobs(TestCase):
         # Save a reference to the Document instance for later use.
         test_models = command_utils.flatten_model_graph(documents_languages)
         for model in reversed(list(test_models)):
-            if isinstance(model, docsnaps.models.Document):
+            if isinstance(model, django_docsnaps.models.Document):
                 document = model
             model.save()
 
         # Create Transform records.
         # Two transform records with sequential priority.
-        docsnaps.models.Transform.objects.create(
-            document_id=document,
-            module='fake.module1',
-            execution_priority=0)
-        docsnaps.models.Transform.objects.create(
-            document_id=document,
-            module='fake.module2',
-            execution_priority=1)
+        # docsnaps.models.Transform.objects.create(
+            # document_id=document,
+            # module='fake.module1',
+            # execution_priority=0)
+        # docsnaps.models.Transform.objects.create(
+            # document_id=document,
+            # module='fake.module2',
+            # execution_priority=1)
 
         # Create Snapshot records.
         # Two existing snapshots for the single active job.
-        docsnaps.models.Snapshot.objects.create(
+        django_docsnaps.models.Snapshot.objects.create(
             documents_languages_id=documents_languages,
             date=snapshot_datetime.date(),
             time=snapshot_datetime.time(),
             datetime=snapshot_datetime,
             text='Old snapshot. Slightly larger small document.')
         snapshot_datetime = snapshot_datetime + snapshot_timedelta
-        docsnaps.models.Snapshot.objects.create(
+        django_docsnaps.models.Snapshot.objects.create(
             documents_languages_id=documents_languages,
             date=snapshot_datetime.date(),
             time=snapshot_datetime.time(),
@@ -90,11 +91,12 @@ class TestGetActiveJobs(TestCase):
         """
         Test exception is properly bubbled when database error occurs.
 
-        The error is re-raised as Django's CommandError.
+        The error is re-raised as Django's CommandError. The model's
+        manager.filter() method is mocked with an exception side effect.
 
         """
         mock_filter = unittest.mock.Mock(side_effect=django.db.Error)
-        patch_target_obj = docsnaps.models.DocumentsLanguages.objects
+        patch_target_obj = django_docsnaps.models.DocumentsLanguages.objects
 
         with unittest.mock.patch.object(
             patch_target_obj,
@@ -112,6 +114,9 @@ class TestGetActiveJobs(TestCase):
         active_jobs = self._command._get_active_jobs()
 
         self.assertEqual(len(active_jobs), 1)
+        self.assertEqual(
+            active_jobs[0].url,
+            test_utils.get_test_models()[0].url)
 
     def test_get_active_jobs_nonexistent(self):
         """
@@ -124,7 +129,7 @@ class TestGetActiveJobs(TestCase):
             https://docs.djangoproject.com/en/dev/topics/testing/tools/#testcase
 
         """
-        docsnaps.models.DocumentsLanguages.objects.all().update(
+        django_docsnaps.models.DocumentsLanguages.objects.all().update(
             is_enabled=False)
         active_jobs = self._command._get_active_jobs()
 
