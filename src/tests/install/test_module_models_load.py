@@ -16,20 +16,20 @@ results because there will be no other records in the database.
 """
 
 import io
-from types import ModuleType
-import unittest.mock as mock
+import types
+import unittest.mock
 
 import django.db
-from django.core.management.base import CommandError
-from django.test import TransactionTestCase
+import django.core.management.base
+import django.test
 
+from django_docsnaps.management.commands._install import Command
+import django_docsnaps.management.commands._utils as command_utils
+import django_docsnaps.models
 from .. import utils as test_utils
-from docsnaps.management.commands._install import Command, ModelLoader
-import docsnaps.management.commands._utils as command_utils
-import docsnaps.models as models
 
 
-class ExceptionAttributeMock(mock.NonCallableMock):
+class ExceptionAttributeMock(unittest.mock.NonCallableMock):
     """
     A class to allow side effects in mock attribute access.
 
@@ -48,7 +48,7 @@ class ExceptionAttributeMock(mock.NonCallableMock):
         raise django.db.Error
 
 
-class TestModuleModelsLoad(TransactionTestCase):
+class TestModuleModelsLoad(django.test.TransactionTestCase):
 
     def setUp(self):
         """
@@ -59,10 +59,10 @@ class TestModuleModelsLoad(TransactionTestCase):
         self._command = Command(stdout=io.StringIO(), stderr=io.StringIO())
         self._models = test_utils.get_test_models()
         self._docs_langs = self._models[0]
-        self._module = mock.NonCallableMock(
+        self._module = unittest.mock.NonCallableMock(
             spec_set=['__class__', '__name__', 'get_models', 'transform'])
         attributes = {
-            '__class__': ModuleType,
+            '__class__': types.ModuleType,
             '__name__': 'mock.module',
             'get_models.return_value': self._models}
         self._module.configure_mock(**attributes)
@@ -76,7 +76,7 @@ class TestModuleModelsLoad(TransactionTestCase):
 
         """
         self._command._load_models(self._module, disabled=True)
-        result_set = models.DocumentsLanguages.objects.all()
+        result_set = django_docsnaps.models.DocumentsLanguages.objects.all()
         self.assertEqual(len(result_set), 1)
         self.assertFalse(result_set[0].is_enabled)
 
@@ -89,7 +89,7 @@ class TestModuleModelsLoad(TransactionTestCase):
 
         """
         # Configure the mock module to return two models instead of one.
-        duplicate_docslangs = models.DocumentsLanguages(
+        duplicate_docslangs = django_docsnaps.models.DocumentsLanguages(
             document_id=self._docs_langs.document_id,
             language_id=self._docs_langs.language_id,
             url='should.be.discarded')
@@ -113,7 +113,8 @@ class TestModuleModelsLoad(TransactionTestCase):
             self._docs_langs, self._docs_langs)
 
         self._command._load_models(self._module)
-        result_set = models.DocumentsLanguages.objects.select_related().all()
+        result_set = django_docsnaps.models.DocumentsLanguages.objects\
+            .select_related().all()
 
         # Verify that the existing data was NOT overwritten.
         self.assertEqual(len(result_set), 1)
@@ -136,7 +137,8 @@ class TestModuleModelsLoad(TransactionTestCase):
 
         """
         self._command._load_models(self._module)
-        result_set = models.DocumentsLanguages.objects.select_related().all()
+        result_set = django_docsnaps.models.DocumentsLanguages.objects\
+            .select_related().all()
 
         # Verify that all foreign key relationships exist and are correct.
         self.assertEqual(len(result_set), 1)
@@ -163,7 +165,7 @@ class TestModuleModelsLoad(TransactionTestCase):
 
         """
         new_url = 'http://new.url.lru'
-        duplicate_docslangs = models.DocumentsLanguages(
+        duplicate_docslangs = django_docsnaps.models.DocumentsLanguages(
             document_id=self._docs_langs.document_id,
             language_id=self._docs_langs.language_id,
             url=new_url)
@@ -171,7 +173,8 @@ class TestModuleModelsLoad(TransactionTestCase):
             self._docs_langs, duplicate_docslangs)
         self._command._load_models(self._module)
 
-        result_set = models.DocumentsLanguages.objects.select_related().all()
+        result_set = django_docsnaps.models.DocumentsLanguages.objects\
+            .select_related().all()
 
         self.assertEqual(len(result_set), 1)
         self.assertEqual(result_set[0].url, new_url)
@@ -189,7 +192,7 @@ class TestModuleModelsLoad(TransactionTestCase):
         # Configure the mock module to return two models instead of one.
         # The first model will be successful, the second will raise exception.
         exception_docslangs = ExceptionAttributeMock(
-            spec_set=models.DocumentsLanguages)
+            spec_set=django_docsnaps.models.DocumentsLanguages)
         attributes = {
             'document_id': self._docs_langs.document_id,
             'language_id': self._docs_langs.language_id
@@ -199,9 +202,10 @@ class TestModuleModelsLoad(TransactionTestCase):
             self._docs_langs, exception_docslangs)
 
         # Verify that the proper exception is re-raised.
-        with self.assertRaises(CommandError):
+        with self.assertRaises(django.core.management.base.CommandError):
             self._command._load_models(self._module)
 
         # Verify that the transaction was rolled back.
-        result_set = models.DocumentsLanguages.objects.select_related().all()
+        result_set = django_docsnaps.models.DocumentsLanguages.objects\
+            .select_related().all()
         self.assertEqual(len(result_set), 0)

@@ -3,13 +3,11 @@ A module that provides a few utility functions and/or classes.
 
 """
 
-from collections import deque
+import collections
 
-from django.core.management.base import CommandError
-from django.core.management.color import color_style
-from django.db.models.fields.related import ForeignKey
-
-from docsnaps.models import DocumentsLanguages
+import django.core.management.base
+import django.core.management.color
+import django.db.models.fields.related
 
 
 def flatten_model_graph(model):
@@ -49,11 +47,11 @@ def flatten_model_graph(model):
         https://github.com/django/django/blob/master/django/db/models/fields/reverse_related.py
 
     """
-    model_queue = deque([model])
+    model_queue = collections.deque([model])
     while model_queue:
         current_model = model_queue.popleft()
         for field in current_model._meta.get_fields():
-            if (isinstance(field, ForeignKey)
+            if (isinstance(field, django.db.models.fields.related.ForeignKey)
                 and hasattr(current_model, field.name)):
                 model_queue.append(getattr(current_model, field.name))
         yield current_model
@@ -83,7 +81,7 @@ def raise_command_error(stdout, message):
         django.core.management.base.CommandError
 
     """
-    style = color_style()
+    style = django.core.management.color.color_style()
     stdout.write(style.ERROR('failed'))
-    raise CommandError(message)
+    raise django.core.management.base.CommandError(message)
 

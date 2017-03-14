@@ -12,8 +12,9 @@ See:
 
 """
 
-APP_LABEL = 'docsnaps'
-DB_NAME = 'docsnaps'
+# Get config from django.conf.settings
+# APP_LABEL = 'docsnaps'
+# DB_NAME = 'docsnaps'
 
 class Router:
 

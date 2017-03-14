@@ -17,8 +17,8 @@ import os
 import sys
 
 import django
-from django.conf import settings
-from django.test.utils import get_runner
+import django.conf
+import django.test.utils
 
 
 if __name__ == '__main__':
@@ -35,7 +35,7 @@ if __name__ == '__main__':
 
     os.environ['DJANGO_SETTINGS_MODULE'] = 'tests.settings'
     django.setup()
-    TestRunner = get_runner(settings)
+    TestRunner = django.test.utils.get_runner(django.conf.settings)
     test_runner = TestRunner(verbosity=2)
     failures = test_runner.run_tests(arguments.test_labels)
     sys.exit(bool(failures))

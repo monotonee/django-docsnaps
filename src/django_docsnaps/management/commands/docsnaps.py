@@ -12,15 +12,14 @@ run
 """
 
 import argparse
-from importlib import import_module
 
-from django.core.management.base import BaseCommand, CommandError
+import django.core.management.base
 
-from docsnaps.management.commands import _install
+from django_docsnaps.management.commands import _install
 # from . import _run as run_parser
 
 
-class Command(BaseCommand):
+class Command(django.core.management.base.BaseCommand):
 
     def __init__(self, stdout=None, stderr=None, no_color=False):
         """
@@ -33,7 +32,9 @@ class Command(BaseCommand):
         """
         super().__init__(stdout=stdout, stderr=stderr, no_color=no_color)
         self._install = _install.Command(
-            stdout=stdout, stderr=stderr, no_color=no_color)
+            stdout=stdout,
+            stderr=stderr,
+            no_color=no_color)
 
     def add_arguments(self, parser):
         """

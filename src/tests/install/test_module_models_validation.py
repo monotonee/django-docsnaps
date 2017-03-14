@@ -7,21 +7,21 @@ Regular expressions are compiled to allow for use of the IGNORECASE flag.
 
 import io
 import re
-import unittest.mock as mock
+import unittest.mock
 
-from django.core.management.base import CommandError
-from django.test import SimpleTestCase
+import django.core.management.base
+import django.test
 
-from docsnaps.management.commands._install import Command
-import docsnaps.models as models
+from django_docsnaps.management.commands._install import Command
+import django_docsnaps.models
 from .. import utils as test_utils
 
 
-class TestValidateModuleModels(SimpleTestCase):
+class TestModuleModelsValidation(django.test.SimpleTestCase):
 
     def setUp(self):
         self._command = Command(stdout=io.StringIO(), stderr=io.StringIO())
-        self._module = mock.NonCallableMock(
+        self._module = unittest.mock.NonCallableMock(
             spec=['__name__', 'get_models', 'transform'])
         attributes = {'__name__': 'mock.module'}
         self._module.configure_mock(**attributes)
@@ -39,7 +39,7 @@ class TestValidateModuleModels(SimpleTestCase):
                 self._module.get_models.return_value = \
                     test_utils.get_test_models(omit=model_name)
                 self.assertRaisesRegex(
-                    CommandError,
+                    django.core.management.base.CommandError,
                     re.compile('.*' + model_name + '.*', flags=re.IGNORECASE),
                     self._command._validate_module_models,
                     self._module)
@@ -52,7 +52,7 @@ class TestValidateModuleModels(SimpleTestCase):
         self._module.get_models.return_value = 42
 
         self.assertRaisesRegex(
-            CommandError,
+            django.core.management.base.CommandError,
             re.compile(r'.*not iterable.*', flags=re.IGNORECASE),
             self._command._validate_module_models,
             self._module)
@@ -65,7 +65,7 @@ class TestValidateModuleModels(SimpleTestCase):
         self._module.get_models.return_value = (42,)
 
         self.assertRaisesRegex(
-            CommandError,
+            django.core.management.base.CommandError,
             re.compile(r'.*type.*', flags=re.IGNORECASE),
             self._command._validate_module_models,
             self._module)

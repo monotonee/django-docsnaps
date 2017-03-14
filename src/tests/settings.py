@@ -16,6 +16,6 @@ DATABASES = {
 }
 
 INSTALLED_APPS = [
-    'docsnaps.apps.DocsnapsConfig',
+    'django_docsnaps.apps.AppConfig',
     'tests'
 ]

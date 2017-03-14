@@ -3,7 +3,7 @@ Utility and common functions used in testing.
 
 """
 
-import docsnaps.models
+import django_docsnaps.models
 
 
 def get_test_models(omit=None):
@@ -40,25 +40,25 @@ def get_test_models(omit=None):
         model_dict = {}
 
         # Assign models
-        model_name = docsnaps.models.Language.__name__
-        model_dict[model_name] = docsnaps.models.Language(
+        model_name = django_docsnaps.models.Language.__name__
+        model_dict[model_name] = django_docsnaps.models.Language(
             language_id=1,
             name='English',
             code_iso_639_1='en') \
             if omit != model_name else None
 
-        model_name = docsnaps.models.Document.__name__
-        model_dict[model_name] = docsnaps.models.Document(
+        model_name = django_docsnaps.models.Document.__name__
+        model_dict[model_name] = django_docsnaps.models.Document(
             document_id=1,
             module='fake.module',
             name='Terms of Use') \
             if omit != model_name else None
 
-        model_name = docsnaps.models.DocumentsLanguages.__name__
-        model_dict[model_name] = docsnaps.models.DocumentsLanguages(
+        model_name = django_docsnaps.models.DocumentsLanguages.__name__
+        model_dict[model_name] = django_docsnaps.models.DocumentsLanguages(
             documents_languages_id=1,
-            document_id=model_dict[docsnaps.models.Document.__name__],
-            language_id=model_dict[docsnaps.models.Language.__name__],
+            document_id=model_dict[django_docsnaps.models.Document.__name__],
+            language_id=model_dict[django_docsnaps.models.Language.__name__],
             url='help.test.tset/legal/termsofuse?locale=en') \
             if omit != model_name else None
 

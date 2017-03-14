@@ -3,13 +3,13 @@ Tests for the utility module in the management command package.
 
 """
 
-from django.test import SimpleTestCase
+import django.test
 
+import django_docsnaps.management.commands._utils as command_utils
 from . import utils as test_utils
-import docsnaps.management.commands._utils as command_utils
 
 
-class TestModelRelationFlattening(SimpleTestCase):
+class TestModelRelationFlattening(django.test.SimpleTestCase):
     """
     Test the model relationship graph flattener.
 

@@ -17,20 +17,17 @@ becomes too large and increases the risk of catching an exception that should
 be allowed to bubble.
 
 """
-from collections import deque
-from importlib import import_module
-from types import ModuleType
+import importlib
 
 import django.core.exceptions
 import django.db
-from django.core.management.base import BaseCommand, CommandError
-from django.db.models.fields.related import ForeignKey
+import django.core.management.base
 
-from docsnaps import models
-import docsnaps.management.commands._utils as command_utils
+import django_docsnaps.management.commands._utils as command_utils
+import django_docsnaps.models
 
 
-class Command(BaseCommand):
+class Command(django.core.management.base.BaseCommand):
 
     help = 'Installs a new snapshot job and registers its transforms.'
 
@@ -52,7 +49,7 @@ class Command(BaseCommand):
         """
         self.stdout.write('Attempting to load module: ', ending='')
         try:
-            module = import_module(module_name)
+            module = importlib.import_module(module_name)
         except ImportError as import_error:
             command_utils.raise_command_error(self.stdout, import_error)
         else:
@@ -66,7 +63,8 @@ class Command(BaseCommand):
         All of the module's data is loaded in a transaction.
 
         Only one exception can be in a thread at a given time. Defer raising
-        CommandError until after exiting try:except block.
+        django.core.management.base.CommandError until after exiting try:except
+        block.
 
         Args:
             module: The imported plugin module as returned by importlib.
@@ -177,11 +175,11 @@ class Command(BaseCommand):
         # Consider using set.symmetric_difference().
         # https://docs.python.org/3/library/stdtypes.html#set.symmetric_difference
         required_classes = {
-            models.Document,
-            models.Language,
-            models.DocumentsLanguages}
+            django_docsnaps.models.Document,
+            django_docsnaps.models.Language,
+            django_docsnaps.models.DocumentsLanguages}
         for model in module_models:
-            if isinstance(model, models.DocumentsLanguages):
+            if isinstance(model, django_docsnaps.models.DocumentsLanguages):
                 returned_classes = set(
                     [m.__class__ for m in command_utils.flatten_model_graph(
                         model)])
@@ -257,8 +255,8 @@ class ModelLoader:
         Initialize an instance.
 
         Args:
-            model (docsnaps.models.DocumentsLanguages): The root of the model
-                relationship graph.
+            model (django_docsnaps.models.DocumentsLanguages): The root of the
+                model relationship graph.
             disabled (boolean): If set to True, disables the new job on insert.
                 If false, value
 
@@ -282,8 +280,8 @@ class ModelLoader:
         Both arguments should be the same model type.
 
         Args:
-            existing_model (docsnaps.models.*): A model instance of the existing
-                record. Must be instance of same model as new_model.
+            existing_model (django_docsnaps.models.*): A model instance of the
+                existing record. Must be instance of same model as new_model.
             new_model (docsnaps.models.*): A model instance of the new record.
                 Must be instance of same model as existing_model.
             field_names (iterable): The names of the fields the values of which
@@ -344,9 +342,10 @@ class ModelLoader:
         """
         # Document
         new_document = self._model.document_id
-        document, created = models.Document.objects.get_or_create(
-            module=new_document.module,
-            name=new_document.name)
+        document, created = django_docsnaps.models.Document.objects\
+            .get_or_create(
+                module=new_document.module,
+                name=new_document.name)
         if not created:
             warning = 'Document "{!s}" for module {!s} already exists.'
             warning = warning.format(new_document.name, new_document.module)
@@ -354,9 +353,10 @@ class ModelLoader:
 
         # Language
         new_language = self._model.language_id
-        language, created = models.Language.objects.get_or_create(
-            code_iso_639_1=new_language.code_iso_639_1,
-            defaults={'name': new_language.name})
+        language, created = django_docsnaps.models.Language.objects\
+            .get_or_create(
+                code_iso_639_1=new_language.code_iso_639_1,
+                defaults={'name': new_language.name})
         if not created:
             warning = (
                 'Language with 639-1 ISO code "{!s}" already exists. '
@@ -375,12 +375,13 @@ class ModelLoader:
         # Updates URL if different.
         is_enabled = self._disabled == False
         new_docs_langs = self._model
-        docs_langs, created = models.DocumentsLanguages.objects.get_or_create(
-            document_id=document,
-            language_id=language,
-            defaults={
-                'url': new_docs_langs.url,
-                'is_enabled': is_enabled})
+        docs_langs, created = django_docsnaps.models.DocumentsLanguages.objects\
+            .get_or_create(
+                document_id=document,
+                language_id=language,
+                defaults={
+                    'url': new_docs_langs.url,
+                    'is_enabled': is_enabled})
         # If this block is entered, Document warning has already been issued.
         if not created and new_docs_langs.url != docs_langs.url:
             old_url = docs_langs.url
@@ -393,9 +394,10 @@ class ModelLoader:
             self.warnings.append(warning)
 
         # Transform
-        # transform, created = models.Transform.objects.get_or_create(
-            # document_id=document,
-            # module=self._module_name)
+        # transform, created = django_docsnaps.models.Transform.objects\
+            # .get_or_create(
+                # document_id=document,
+                # module=self._module_name)
         # if not created:
             # self.warnings.append(
                 # transform.__class__.__name__ + ': '

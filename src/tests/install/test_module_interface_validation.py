@@ -4,20 +4,19 @@ Tests the "install" subcommand's plugin module validation.
 """
 
 import io
-import unittest.mock as mock
+import unittest.mock
 
-from django.core.management.base import CommandError
-from django.test import SimpleTestCase
+import django.core.management.base
+import django.test
 
-from docsnaps.management.commands._install import Command
-import docsnaps.models as models
+from django_docsnaps.management.commands._install import Command
 
 
-class TestValidateModuleInterface(SimpleTestCase):
+class TestModuleInterfaceValidation(django.test.SimpleTestCase):
 
     def setUp(self):
         self._command = Command(stdout=io.StringIO(), stderr=io.StringIO())
-        self._module = mock.NonCallableMock()
+        self._module = unittest.mock.NonCallableMock()
         self._module.__name__ = 'mock.module'
 
     def test_get_models_missing(self):
@@ -28,7 +27,7 @@ class TestValidateModuleInterface(SimpleTestCase):
         self._module.mock_add_spec(['__name__'], spec_set=True)
 
         self.assertRaises(
-            CommandError,
+            django.core.management.base.CommandError,
             self._command._validate_module_interface,
             self._module)
 
@@ -38,10 +37,10 @@ class TestValidateModuleInterface(SimpleTestCase):
 
         """
         self._module.mock_add_spec(['__name__', 'get_models'], spec_set=True)
-        self._module.get_models = mock.NonCallableMock()
+        self._module.get_models = unittest.mock.NonCallableMock()
 
         self.assertRaises(
-            CommandError,
+            django.core.management.base.CommandError,
             self._command._validate_module_interface,
             self._module)
 
@@ -53,7 +52,7 @@ class TestValidateModuleInterface(SimpleTestCase):
         self._module.mock_add_spec(['__name__', 'get_models'], spec_set=True)
 
         self.assertRaises(
-            CommandError,
+            django.core.management.base.CommandError,
             self._command._validate_module_interface,
             self._module)
 
@@ -65,10 +64,10 @@ class TestValidateModuleInterface(SimpleTestCase):
         self._module.mock_add_spec(
             ['__name__', 'get_models', 'transform'],
             spec_set=True)
-        self._module.transform = mock.NonCallableMock()
+        self._module.transform = unittest.mock.NonCallableMock()
 
         self.assertRaises(
-            CommandError,
+            django.core.management.base.CommandError,
             self._command._validate_module_interface,
             self._module)
 

@@ -6,13 +6,13 @@ This module defines tests for the "install" subcommand's _import_module method.
 import io
 import types
 
-from django.core.management.base import CommandError
-from django.test import SimpleTestCase
+import django.core.management.base
+import django.test
 
-from docsnaps.management.commands._install import Command
+from django_docsnaps.management.commands._install import Command
 
 
-class TestImportModule(SimpleTestCase):
+class TestModuleImport(django.test.SimpleTestCase):
     """
     Tests of the "install" subcommand's plugin module import.
 
@@ -30,7 +30,7 @@ class TestImportModule(SimpleTestCase):
 
         """
         self.assertRaises(
-            CommandError,
+            django.core.management.base.CommandError,
             self._command._import_module,
             'dodge.this')
 

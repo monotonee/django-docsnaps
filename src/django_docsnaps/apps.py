@@ -1,9 +1,9 @@
 import os.path
 
-from django.apps import AppConfig
+import django.apps
 
 
-class DocsnapsConfig(AppConfig):
-    name = 'docsnaps'
+class AppConfig(django.apps.AppConfig):
+    name = 'django_docsnaps'
     path = os.path.dirname(__file__)
     verbose_name = 'document snapshots'
