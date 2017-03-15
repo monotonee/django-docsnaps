@@ -55,7 +55,6 @@ class Command(django.core.management.base.BaseCommand):
         """
         self.stdout.write('Querying enabled snapshot jobs: ', ending='')
 
-        command_error_message = None
         try:
             docsnaps_set = django_docsnaps.models.DocumentsLanguages.objects\
                 .filter(is_enabled=True)
@@ -85,7 +84,7 @@ class Command(django.core.management.base.BaseCommand):
                 instances representing records in which is_enabled is True.
 
         """
-        snapshots = await self._get_snapshots()
+        snapshots = await self._get_latest_snapshots()
 
         loop = asyncio.get_event_loop()
         with aiohttp.ClientSession() as client_session:
@@ -174,7 +173,7 @@ class Command(django.core.management.base.BaseCommand):
         import pdb; pdb.set_trace()
         pass
 
-    async def _get_snapshots(self):
+    async def _get_latest_snapshots(self):
         """
         Get the latest document snapshot for each active job.
 
@@ -194,14 +193,26 @@ class Command(django.core.management.base.BaseCommand):
         string.
 
         I refuse to use manager.raw() as select_related() is not supported and
-        the Snapshot models will therefore issue a separate query for EVERY
-        DocumentsLanguages PK access.
+        the returned Snapshot models in the QuerySet will therefore issue a
+        separate query for EVERY DocumentsLanguages PK access.
+        QuerySet.prefetch_related() would be a possibility but again, the
+        potential for high record cardinality makes this unsufficiently scalable
+        since the cache is maintained in memory.
+
+        See:
+            https://docs.djangoproject.com/en/dev/ref/models/querysets/#prefetch-related
 
         The only other alternative is to use QuerySet.iterator() to look for and
         save the latest Snapshot for each DocumentsLanguages record. However,
-        this still requires iterating over EVERY active snapshot record. ORM
-        layers are such double-edged swords and are meant for nothing more than
-        very simple web sites.
+        this still requires iterating over EVERY active snapshot record.
+
+        See:
+            https://docs.djangoproject.com/en/dev/ref/models/querysets/#iterator
+
+        cursor.description returns a tuple of multiple items.
+
+        See:
+            https://github.com/django/django/blob/master/django/db/backends/base/introspection.py
 
         Returns:
             dict: A dictionary of the latest Snapshot text for each
@@ -224,23 +235,20 @@ class Command(django.core.management.base.BaseCommand):
                     AND {DocumentsLanguages}.is_enabled IS TRUE
             WHERE
                 snapshot_2.snapshot_id IS NULL'''
+        dl_db_table = django_docsnaps.models.DocumentsLanguages._meta.db_table
+        s_db_table = django_docsnaps.models.Snapshot._meta.db_table
         snapshot_sql = snapshot_sql.format(
-            DocumentsLanguages=docsnaps.models.DocumentsLanguages._meta.db_table,
-            Snapshot=docsnaps.models.Snapshot._meta.db_table)
+            DocumentsLanguages=dl_db_table,
+            Snapshot=s_db_table)
 
-        command_error_message = None
         try:
             with django.db.connection.cursor() as cursor:
                 cursor.execute(snapshot_sql)
                 result_set = cursor.fetchall()
         except django.db.Error as exception:
-            command_error_message = (
-                'A database error occurred: ' + str(exception))
-
-        if command_error_message:
             command_utils.raise_command_error(
                 self.stdout,
-                command_error_message)
+                'A database error occurred: ' + str(exception))
 
         snapshot_dict = {snapshot[1]: snapshot[2] for snapshot in result_set}
         return snapshot_dict
