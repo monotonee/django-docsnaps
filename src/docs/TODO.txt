@@ -12,6 +12,11 @@ Replace use of QuerySet.first() with numeric index syntax
 Include a "default" module in django_docsnaps for use if adding document
     manually, separately from plugin module
     Module will apply no transform but simply compare raw snapshots.
+Change _run._get_active_jobs to _get_enabled_jobs + change tests
+Watch the Snapshot date, time, and datetime fields for offsets in time due to
+    slow execution.
+Add verbose status messages to _run subcommand. Due to asnyc calls, must watch
+    for awaits. Messages may be output in different order.
 
 Add logging to request method
     Log redirect HTTP codes with low severity

@@ -1,5 +1,5 @@
 """
-A module of app-specific settings and defaults.
+A module of app-specific settings and their respective defaults.
 
 """
 
