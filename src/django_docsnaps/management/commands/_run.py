@@ -183,36 +183,21 @@ class Command(django.core.management.base.BaseCommand):
         thousands of document snapshots, it becomes unfeasable and detrimental
         to attempt to load all snapshot records. Therefore, some method must be
         found to limit the results to the latest snapshot. In-memory sorting is
-        impractical with high cardinality. The database layer is the appropriate
-        place to perform sorting and limiting but a more complex query is
-        required.
+        not ideal inside a web application. The database layer is the
+        appropriate and most efficient place to perform sorting and limiting but
+        a more complex query is required.
 
         I use a self-join to find the latest Snapshot record for each
         DocumentsLanguages record. I am tired of fighting with the ORM for
         everything but the most basic queries. I am therefore using a raw SQL
         string.
 
-        I refuse to use manager.raw() as select_related() is not supported and
-        the returned Snapshot models in the QuerySet will therefore issue a
-        separate query for EVERY DocumentsLanguages PK access.
-        QuerySet.prefetch_related() would be a possibility but again, the
-        potential for high record cardinality makes this unsufficiently scalable
-        since the cache is maintained in memory.
-
-        See:
-            https://docs.djangoproject.com/en/dev/ref/models/querysets/#prefetch-related
-
-        The only other alternative is to use QuerySet.iterator() to look for and
-        save the latest Snapshot for each DocumentsLanguages record. However,
-        this still requires iterating over EVERY active snapshot record.
-
-        See:
-            https://docs.djangoproject.com/en/dev/ref/models/querysets/#iterator
-
-        cursor.description returns a tuple of multiple items.
-
-        See:
-            https://github.com/django/django/blob/master/django/db/backends/base/introspection.py
+        Note the added "raw" field in the SELECT query. Attempting to get the
+        documents_languages_id from the Snapshot field causes the ORM to issue
+        a separate query for each documents_languages_id since the field is a
+        DocumentsLanguages instance. By using the ORM's annotation feature with
+        raw(), I can get the simple integer documents_languages_id without
+        loading an entire DocumentsLanguages instance data from the database.
 
         Returns:
             dict: A dictionary of the latest Snapshot text for each
@@ -224,7 +209,11 @@ class Command(django.core.management.base.BaseCommand):
             SELECT
                 {Snapshot}.snapshot_id
                 ,{Snapshot}.documents_languages_id
+                ,{Snapshot}.date
+                ,{Snapshot}.time
+                ,{Snapshot}.datetime
                 ,{Snapshot}.text
+                ,{Snapshot}.documents_languages_id AS raw_documents_languages_id
             FROM
                 {Snapshot}
                 LEFT JOIN {Snapshot} as snapshot_2
@@ -242,15 +231,17 @@ class Command(django.core.management.base.BaseCommand):
             Snapshot=s_db_table)
 
         try:
-            with django.db.connection.cursor() as cursor:
-                cursor.execute(snapshot_sql)
-                result_set = cursor.fetchall()
+            snapshot_set = django_docsnaps.models.Snapshot.objects.raw(
+                snapshot_sql)
         except django.db.Error as exception:
             command_utils.raise_command_error(
                 self.stdout,
                 'A database error occurred: ' + str(exception))
 
-        snapshot_dict = {snapshot[1]: snapshot[2] for snapshot in result_set}
+        snapshot_dict = {
+            snapshot.raw_documents_languages_id: snapshot \
+            for snapshot in snapshot_set}
+
         return snapshot_dict
 
     def add_arguments(self, parser):

@@ -12,6 +12,8 @@ import datetime
 import io
 import unittest.mock
 
+import django.core.management.base
+import django.db
 import django.test
 
 from django_docsnaps.management.commands._run import Command
@@ -158,6 +160,15 @@ class TestGetLatestSnapshots(django.test.TestCase):
         manager.filter() method is mocked with an exception side effect.
 
         """
-        raise NotImplementedError('Finish this test.')
+        raw_mock = unittest.mock.Mock(side_effect=django.db.Error)
+        patch_target = django_docsnaps.models.Snapshot.objects
 
-
+        event_loop = asyncio.get_event_loop()
+        with unittest.mock.patch.object(
+            patch_target,
+            'raw',
+            raw_mock):
+            self.assertRaises(
+                django.core.management.base.CommandError,
+                event_loop.run_until_complete,
+                self._command._get_latest_snapshots())
