@@ -18,7 +18,7 @@ TODO: Remove database exception handling? handlers don't do anything but throw
 """
 
 import asyncio
-#from importlib import import_module
+import importlib
 
 import aiohttp
 import django.conf
@@ -27,6 +27,7 @@ import django.db
 
 import django_docsnaps.models
 import django_docsnaps.management.commands._utils as command_utils
+import django_docsnaps.settings
 
 
 class Command(django.core.management.base.BaseCommand):
@@ -46,8 +47,8 @@ class Command(django.core.management.base.BaseCommand):
             instances.
 
         Raises:
-            django.core.management.base.CommandError: If database operation
-                fails.
+            django.core.management.base.CommandError: If exception is raised by
+                underlying database library.
 
         See:
             https://docs.djangoproject.com/en/dev/topics/db/sql/#adding-annotations
@@ -65,113 +66,6 @@ class Command(django.core.management.base.BaseCommand):
 
         self.stdout.write(self.style.SUCCESS('success'))
         return docsnaps_set
-
-    async def _execute_jobs(self, active_jobs):
-        """
-        Execute each job in the passed iterable of snapshot jobs.
-
-        Defined in own function to reduce nested block levels in the handle()
-        method. This method handles the creation of event loop, coroutine
-        creation and scheduling, and the aiohttp session creation.
-
-        Defined as a coroutine to shut aiohttp up. aiohttp apparently issues
-        warnings directly to stdout when one tries to use a ClientSession
-        while loop is not running. I have yet to find documentation on the
-        technical reasons for this requirement.
-
-        Args:
-            active_jobs (iterable): An iterable of DocumentsLanguages model
-                instances representing records in which is_enabled is True.
-
-        """
-        snapshots = await self._get_latest_snapshots()
-
-        loop = asyncio.get_event_loop()
-        with aiohttp.ClientSession() as client_session:
-            tasks = []
-            for job in active_jobs:
-                snapshot = snapshots.get(job.documents_languages_id, None)
-                task = loop.create_task(
-                    self._execute_job(job, client_session, snapshot))
-                tasks.append(task)
-
-            done, pending = await asyncio.wait(tasks)
-
-    async def _execute_job(self, job, client_session, snapshot_text=None):
-        """
-        Execute a single snapshot job.
-
-        Args:
-            job (DocumentsLanguages): A DocumentsLanguages model instance.
-            snapshot_text (string): The text of the job's most recent snapshot.
-            client_session: An HTTP request session. In aiohttp, for
-                example, this is a ClientSession object, an abstraction of a
-                connection pool.
-
-        """
-        raw_snapshot = await self._request_document(client_session, job.url)
-        processed_snapshot = await self._transform_document(job, raw_snapshot)
-        self.stdout.write('Pre-sleep')
-        await asyncio.sleep(1)
-        self.stdout.write('Post-sleep')
-        raise Exception('test')
-
-    async def _request_document(self, client_session, url):
-        """
-        Request the document from the remote source.
-
-        May need more robust response handling than raise_for_status().
-        Note that aiohttp's ClientSession will follow redirects by default.
-
-        There is currently no catching and re-raising of exceptions since,
-        according to my current undrstanding, the exception will be caught and
-        saved by the asyncio.Task wrapper class. The exception will bubble up
-        to the main "execute all jobs" method/coroutine" where, after all
-        coroutine execution is complete, the tasks will be examined for
-        exceptions.
-
-        Possible errors:
-            aiohttp.errors.ClientError,
-            aiohttp.errors.HttpProcessingError,
-            aiohttp.errors.TimeoutError
-
-        Args:
-            client_session: An HTTP request session. In aiohttp, for
-                example, this is a ClientSession object, an abstraction of a
-                connection pool.
-            url (string): The URL to which a GET request will be issued.
-
-        Returns:
-            string: A string of the fetched document.
-
-        See:
-            https://github.com/KeepSafe/aiohttp/blob/master/aiohttp/errors.py
-
-        """
-        response = await client_session.get(
-            url,
-            timeout=docsnaps.settings.DOCSNAPS_REQUEST_TIMEOUT)
-        response.raise_for_status()
-        response_text = await response.text()
-        response.close()
-
-        return response_text
-
-    async def _transform_document(self, job, raw_snapshot):
-        """
-        Apply all transforms to the document.
-
-        Args:
-            raw_snapshot (string): The raw document, freshly-fetched from the
-                remote source.
-
-        Returns:
-            string: The document after all transforms have been applied
-                sequentially.
-
-        """
-        import pdb; pdb.set_trace()
-        pass
 
     async def _get_latest_snapshots(self):
         """
@@ -244,6 +138,186 @@ class Command(django.core.management.base.BaseCommand):
 
         return snapshot_dict
 
+    async def _execute_single_job(self, job, client_session, snapshot=None):
+        """
+        Execute a single snapshot job.
+
+        Args:
+            job (django_docsnaps.models.DocumentsLanguages): A
+                DocumentsLanguages model instance. This model class represents
+                a snapshot job on which is_enabled=True.
+            client_session: An HTTP request session. In aiohttp, for
+                example, this is a ClientSession object, an abstraction of a
+                connection pool.
+            snapshot (django_docsnaps.models.Snapshot): The latest
+                Snapshot record created by the job. When None, no Snapshot
+                record yet exists.
+
+        """
+        doc_text = await self._request_document(client_session, job.url)
+        job_module = self._import_job_module(job)
+        transformed_doc_text, doc_is_changed = job_module.transform(doc_text)
+        if doc_is_changed:
+            await self._save_new_snapshot(job, transformed_doc_text)
+        else:
+            # Do something here. Status message.
+            pass
+
+    async def _execute_enabled_jobs(self, active_jobs, loop=None):
+        """
+        Execute each job in the passed iterable of snapshot jobs.
+
+        This method manages the creation of coroutines, task objects, task
+        scheduling, and the creation of the aiohttp session.
+
+        Defined in own function to reduce nested block levels in the handle()
+        method. In addition, I find it more semantic to separate domain logic
+        from generic argparse interface methods such as handle().
+
+        Defined as a coroutine to shut aiohttp up. aiohttp apparently issues
+        warnings directly to stdout when one tries to use a ClientSession
+        while loop is not running. I have yet to find documentation on the
+        technical reasons for this requirement.
+
+        Args:
+            active_jobs (iterable): An iterable of DocumentsLanguages model
+                instances representing records in which is_enabled is True.
+
+        """
+        if not loop:
+            loop = asyncio.get_event_loop()
+
+        snapshots = await self._get_latest_snapshots()
+
+        with aiohttp.ClientSession(loop=loop) as client_session:
+            tasks = []
+            for job in active_jobs:
+                snapshot = snapshots.get(job.documents_languages_id, None)
+                task = loop.create_task(
+                    self._execute_single_job(
+                        job, client_session, snapshot=snapshot))
+                tasks.append(task)
+
+            done, pending = await asyncio.wait(tasks)
+
+    def _import_job_module(self, job):
+        """
+        Attempt to import the job's module.
+
+        Each job (DocumentsLanguages model instance) is associated with a Python
+        module. This module is responsible for, at the very least, deciding if
+        a new document snapshot needs to be saved and if any transformations to
+        the document text need to be applied.
+
+        Args:
+            job (django_docsnaps.models.DocumentsLanguages): A
+                DocumentsLanguages model instance. This model class represents
+                a snapshot job on which is_enabled=True.
+
+        Returns:
+            module: The Python module object returned by importlib.
+
+        Raises:
+            django.core.management.base.CommandError: If module cannot be
+                imported.
+
+        """
+        try:
+            module = importlib.import_module(job.document_id.module)
+        except ImportError as exception:
+            exception_message = (
+                'The module "{!s}" for snapshot job "{!s}" could not be '
+                'imported.')
+            exception_message = exception_message.format(
+                job.document_id.module,
+                job.document_id.name)
+            command_utils.raise_command_error(self.stdout, exception_message)
+
+        return module
+
+    async def _request_document(self, client_session, url):
+        """
+        Request the document from the remote source.
+
+        May need more robust response handling than raise_for_status().
+        Note that aiohttp's ClientSession will follow redirects by default.
+
+        Possible errors:
+            aiohttp.errors.ClientError
+                Client connection errors.
+            aiohttp.errors.HttpProcessingError
+                From response.raise_for_status().
+            aiohttp.errors.ClientTimeoutError
+                ClientTimeoutError inherits from both ClientError (ancestor to
+                parent ClientConnectionError) and asyncio.TimeoutError.
+                aiohttp.errors.TimeoutError is a passthrough of
+                asyncio.TimeoutError.
+
+        See:
+            https://github.com/aio-libs/aiohttp/blob/1.3/aiohttp/errors.py
+            https://github.com/aio-libs/aiohttp/blob/1.3/aiohttp/client_reqrep.py
+            https://aiohttp.readthedocs.io/en/stable/client_reference.html#aiohttp.ClientResponse.raise_for_status
+
+        Args:
+            client_session: An HTTP request session. In aiohttp, for
+                example, this is a ClientSession object, an abstraction of a
+                connection pool.
+            url (string): The URL to which a GET request will be issued.
+
+        Returns:
+            string: A string of the fetched document.
+
+        Raises:
+            django.core.management.base.CommandError: If any HTTP request
+                exceptions are raised by underlying HTTP library.
+
+        """
+        timeout = django_docsnaps.settings.DJANGO_DOCSNAPS_REQUEST_TIMEOUT
+        response_text = None
+        try:
+            async with client_session.get(url, timeout=timeout) as response:
+                response.raise_for_status()
+                response_text = await response.text()
+        except (
+            asyncio.errors.ClientError,
+            aiohttp.errors.HttpProcessingError) as exception:
+            exception_message = (
+                'The request for the document at URL "{!s}" failed with the '
+                'following exception: ')
+            exception_message.format(url)
+            comamnd_utils.raise_commend_error(
+                self.stdout,
+                exception_message + str(exception))
+
+        return response_text
+
+    async def _save_new_snapshot(self, job, snapshot_text):
+        """
+        Save a new document snapshot in the database for the passed job.
+
+        Args:
+            job (django_docsnaps.models.DocumentsLanguages): A
+                DocumentsLanguages model instance. This model class represents
+                a snapshot job on which is_enabled=True.
+            snapshot_text (string): The text of the new document snapshot.
+
+        Returns:
+            django_docsnaps.models.Snapshot: The new Snapshot model instance
+                after save() has been called.
+
+        Raises:
+            Raises:
+            django.core.management.base.CommandError: If exception is raised by
+                underlying database library.
+
+        """
+        new_snapshot = django_docsnaps.models.Snapshot(
+            documents_languages_id=job,
+            text=snapshot_text)
+        new_snapshot.save()
+
+        return new_snapshot
+
     def add_arguments(self, parser):
         """
         Add arguments to the argparse parser object.
@@ -256,14 +330,15 @@ class Command(django.core.management.base.BaseCommand):
         pass
 
     def handle(self, *args, **options):
-        active_jobs = self._get_active_jobs()
-        if active_jobs:
+        enabled_jobs = self._get_active_jobs()
+        if enabled_jobs:
             loop = asyncio.get_event_loop()
-            loop.run_until_complete(self._execute_jobs(active_jobs))
+            loop.run_until_complete(
+                self._execute_enabled_jobs(enabled_jobs, loop=loop))
             loop.close()
             run_status = self.style.SUCCESS(
                 'Active jobs completed successfully.')
         else:
             run_status = self.style.WARNING('No active jobs found.')
 
-        self.stdout.write('Run complete: ' + run_status)
+        self.stdout.write('Job execution complete: ' + run_status)
