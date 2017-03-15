@@ -153,6 +153,10 @@ class Snapshot(django.db.models.Model):
     Discrete date and time fields are separated for index and query optimization
     and a datetime field is used for ranges and range comparison.
 
+    These fields will needto be watched closely. If the auto_now operations
+    for each field occur too slowly, they will produce times that differ by one
+    second or more.
+
     """
 
     snapshot_id = django.db.models.AutoField(primary_key=True)
@@ -161,9 +165,12 @@ class Snapshot(django.db.models.Model):
         db_column='documents_languages_id',
         on_delete=django.db.models.PROTECT,
         verbose_name='document instance')
-    date = django.db.models.DateField(null=False)
-    time = django.db.models.TimeField(null=False)
-    datetime = django.db.models.DateTimeField(db_index=True, null=False)
+    date = django.db.models.DateField(auto_now=True, null=False)
+    time = django.db.models.TimeField(auto_now=True, null=False)
+    datetime = django.db.models.DateTimeField(
+        auto_now=True,
+        db_index=True,
+        null=False)
     text = django.db.models.TextField(blank=True, null=True)
 
     class Meta:
